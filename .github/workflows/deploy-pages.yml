@@ -1,0 +1,55 @@
+# main 브랜치에 YNCsurvival 게임 코드가 push 되면 자동으로 빌드해서 GitHub Pages 에 배포
+# 배포 주소: https://yncjin.github.io/AIProject/
+# 처음 한 번: 저장소 Settings > Pages > Build and deployment > Source 를 "GitHub Actions" 로 설정해야 함
+
+name: Deploy game to GitHub Pages
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - 'YNCsurvival/**'
+      - '!YNCsurvival/middleware/**'
+      - '.github/workflows/deploy-pages.yml'
+  workflow_dispatch:    # Actions 탭에서 수동 실행 가능
+
+permissions:
+  contents: read
+  pages: write
+  id-token: write
+
+concurrency:
+  group: pages
+  cancel-in-progress: true
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: YNCsurvival
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+          cache-dependency-path: YNCsurvival/package-lock.json
+
+      - run: npm ci
+      - run: npm run build-nolog
+
+      - uses: actions/upload-pages-artifact@v3
+        with:
+          path: YNCsurvival/dist
+
+  deploy:
+    needs: build
+    runs-on: ubuntu-latest
+    environment:
+      name: github-pages
+      url: ${{ steps.deployment.outputs.page_url }}
+    steps:
+      - id: deployment
+        uses: actions/deploy-pages@v4

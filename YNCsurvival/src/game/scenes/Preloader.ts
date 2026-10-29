@@ -71,6 +71,40 @@ export class Preloader extends Scene
         g.generateTexture('bullet', 8, 8);
         g.clear();
 
+        //  경험치 보석: 초록 마름모
+        g.fillStyle(0x66bb6a);
+        g.fillTriangle(5, 0, 10, 6, 0, 6);
+        g.fillTriangle(0, 6, 10, 6, 5, 12);
+        g.generateTexture('gem', 10, 12);
+        g.clear();
+
+        //  큰 경험치 보석 (보스 드롭): 파란 마름모
+        g.fillStyle(0x42a5f5);
+        g.fillTriangle(8, 0, 16, 10, 0, 10);
+        g.fillTriangle(0, 10, 16, 10, 8, 20);
+        g.generateTexture('gemBig', 16, 20);
+        g.clear();
+
+        //  중간 보스: 보라 원 + 눈
+        g.fillStyle(0x8e24aa).fillCircle(24, 24, 24);
+        g.lineStyle(3, 0x4a148c).strokeCircle(24, 24, 22);
+        g.fillStyle(0xffeb3b).fillCircle(16, 20, 4).fillCircle(32, 20, 4);
+        g.generateTexture('midBoss', 48, 48);
+        g.clear();
+
+        //  최종 보스: 큰 검붉은 사각형 + 노란 테두리 + 눈
+        g.fillStyle(0x7f0000).fillRoundedRect(0, 0, 96, 96, 16);
+        g.lineStyle(4, 0xffd600).strokeRoundedRect(2, 2, 92, 92, 14);
+        g.fillStyle(0xffd600).fillTriangle(22, 34, 42, 40, 22, 46).fillTriangle(74, 34, 54, 40, 74, 46);
+        g.generateTexture('finalBoss', 96, 96);
+        g.clear();
+
+        //  보스 탄환: 주황 원
+        g.fillStyle(0xff6d00).fillCircle(6, 6, 6);
+        g.fillStyle(0xffe0b2).fillCircle(6, 6, 3);
+        g.generateTexture('bossBullet', 12, 12);
+        g.clear();
+
         //  바닥 타일: 격자 무늬 (이동감이 보이도록)
         g.fillStyle(0x1a1a2e).fillRect(0, 0, 64, 64);
         g.lineStyle(1, 0x2a2a4a).strokeRect(0, 0, 64, 64);

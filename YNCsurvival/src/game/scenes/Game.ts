@@ -1,55 +1,49 @@
 import { Scene } from 'phaser';
-
-//  밸런스 수치 - 여기만 고치면 난이도 조절 가능
-const WORLD_SIZE = 4000;
-
-const PLAYER_SPEED = 200;
-const PLAYER_MAX_HP = 100;
-const PLAYER_INVULN_MS = 500;       //  피격 후 무적 시간
-
-const ENEMY_SPEED = 80;
-const ENEMY_HP = 3;
-const ENEMY_CONTACT_DAMAGE = 10;
-const ENEMY_MAX_COUNT = 300;
-
-const SPAWN_INTERVAL_START_MS = 1000;   //  시작 시 적 생성 간격
-const SPAWN_INTERVAL_MIN_MS = 150;      //  최소 생성 간격
-const SPAWN_SPEEDUP_PER_SEC = 8;        //  1초마다 생성 간격이 줄어드는 양(ms)
-
-const FIRE_INTERVAL_MS = 400;
-const FIRE_RANGE = 500;
-const BULLET_SPEED = 450;
-const BULLET_DAMAGE = 1;
-const BULLET_LIFE_MS = 1500;
-
-type Sprite = Phaser.Physics.Arcade.Sprite;
+import { ENEMY, FALLBACK_HEAL, SHOW_DEBUG_BUTTONS, WORLD_SIZE } from '../config';
+import { PASSIVE_IDS, PASSIVES } from '../data/passives';
+import { WeaponId } from '../data/weapons';
+import { Boss } from '../entities/Boss';
+import { Player } from '../entities/Player';
+import { BossManager } from '../systems/BossManager';
+import { EnemySpawner } from '../systems/EnemySpawner';
+import { Experience } from '../systems/Experience';
+import { PlayerStats } from '../systems/PlayerStats';
+import { Targets } from '../systems/Targets';
+import { rollUpgradeChoices, UpgradeChoice } from '../systems/Upgrades';
+import { createDebugButtons } from '../ui/DebugButtons';
+import { Hud } from '../ui/Hud';
+import { MagicBolt } from '../weapons/MagicBolt';
+import { Weapon, WeaponContext } from '../weapons/Weapon';
+import { LevelUpData } from './LevelUp';
 
 export interface GameResult
 {
     survivedMs: number;
     kills: number;
+    level: number;
+    cleared: boolean;   //  최종 보스 처치 여부
 }
 
+//  게임 본체: 각 시스템을 만들고 연결하는 역할만 한다
+//  세부 동작은 entities / systems / weapons / ui 폴더 참고
 export class Game extends Scene
 {
-    player: Sprite;
-    enemies: Phaser.Physics.Arcade.Group;
-    bullets: Phaser.Physics.Arcade.Group;
+    stats: PlayerStats;
+    player: Player;
+    enemies: EnemySpawner;
+    bosses: BossManager;
+    targets: Targets;
+    experience: Experience;
+    weapons: Weapon[];
+    hud: Hud;
 
     cursors: Phaser.Types.Input.Keyboard.CursorKeys;
     wasd: Record<'up' | 'down' | 'left' | 'right', Phaser.Input.Keyboard.Key>;
 
-    hpBar: Phaser.GameObjects.Graphics;
-    timerText: Phaser.GameObjects.Text;
-    killText: Phaser.GameObjects.Text;
-
     //  씬 재시작 시에도 초기화되도록 create()에서 값을 넣는다
-    hp: number;
     kills: number;
     elapsedMs: number;
-    spawnAccMs: number;
-    nextFireAt: number;
-    invulnUntil: number;
+    pendingLevelUps: number;
     isGameOver: boolean;
 
     constructor ()
@@ -59,12 +53,9 @@ export class Game extends Scene
 
     create ()
     {
-        this.hp = PLAYER_MAX_HP;
         this.kills = 0;
         this.elapsedMs = 0;
-        this.spawnAccMs = 0;
-        this.nextFireAt = 0;
-        this.invulnUntil = 0;
+        this.pendingLevelUps = 0;
         this.isGameOver = false;
 
         //  월드 & 바닥
@@ -72,36 +63,58 @@ export class Game extends Scene
         this.add.tileSprite(0, 0, WORLD_SIZE, WORLD_SIZE, 'ground').setOrigin(0);
 
         //  플레이어
-        this.player = this.physics.add.sprite(WORLD_SIZE / 2, WORLD_SIZE / 2, 'player');
-        this.player.setCollideWorldBounds(true);
-        this.player.setDepth(10);
-
+        this.stats = new PlayerStats();
+        this.player = new Player(this, WORLD_SIZE / 2, WORLD_SIZE / 2, this.stats);
         this.cameras.main.setBounds(0, 0, WORLD_SIZE, WORLD_SIZE);
         this.cameras.main.startFollow(this.player, true);
 
-        //  적 / 투사체는 오브젝트 풀로 재사용 (매번 생성·삭제하지 않음)
-        this.enemies = this.physics.add.group({ maxSize: ENEMY_MAX_COUNT });
-        this.bullets = this.physics.add.group({ maxSize: 100 });
+        //  적 / 경험치
+        this.enemies = new EnemySpawner(this, this.player, (x, y, xp) => {
+            this.kills++;
+            this.experience.dropGem(x, y, xp);
+        });
+        this.experience = new Experience(this, this.player, () => this.onLevelUp());
 
-        //  충돌 처리
-        this.physics.add.overlap(this.bullets, this.enemies, (bullet, enemy) => {
-            this.onBulletHitEnemy(bullet as Sprite, enemy as Sprite);
+        //  보스 (중간 보스 / 최종 보스)
+        this.bosses = new BossManager(this, this.player, {
+            onHitPlayer: (damage) => this.onPlayerHit(damage),
+            onBossSpawned: (boss) => this.announce(
+                boss.kind === 'final' ? '최종 보스 등장!' : '중간 보스 등장!',
+                boss.kind === 'final' ? '#ff5252' : '#ce93d8'
+            ),
+            onBossKilled: (boss) => this.onBossKilled(boss)
         });
-        this.physics.add.overlap(this.player, this.enemies, () => {
-            this.onPlayerHit(ENEMY_CONTACT_DAMAGE);
+        this.targets = new Targets(this.enemies, this.bosses);
+
+        //  무기 (시작 무기: 매직 볼트)
+        this.weapons = [this.createWeapon('magicBolt')];
+
+        //  적 / 보스와 닿으면 피해
+        this.physics.add.overlap(this.player, this.enemies.group, () => {
+            this.onPlayerHit(ENEMY.contactDamage);
         });
-        //  적끼리 서로 밀어내서 한 점에 겹치지 않게
-        this.physics.add.collider(this.enemies, this.enemies);
+        this.physics.add.overlap(this.player, this.bosses.group, (_player, boss) => {
+            this.onPlayerHit((boss as Boss).contactDamage);
+        });
 
         //  입력 (방향키 + WASD)
         const keyboard = this.input.keyboard!;
         this.cursors = keyboard.createCursorKeys();
         this.wasd = keyboard.addKeys({ up: 'W', down: 'S', left: 'A', right: 'D' }) as Game['wasd'];
 
-        this.createHud();
+        this.hud = new Hud(this);
+        this.updateHud();
+
+        if (SHOW_DEBUG_BUTTONS)
+        {
+            createDebugButtons(this, [
+                { label: '중간 보스 소환', onClick: () => this.bosses.spawnMidBoss() ?? this.announce('중간 보스 최대 수 도달', '#b0bec5') },
+                { label: '최종 보스 소환', onClick: () => this.bosses.spawnFinalBoss() ?? this.announce('최종 보스가 이미 있음', '#b0bec5') }
+            ]);
+        }
     }
 
-    update (time: number, delta: number)
+    update (_time: number, delta: number)
     {
         if (this.isGameOver)
         {
@@ -110,17 +123,18 @@ export class Game extends Scene
 
         this.elapsedMs += delta;
 
-        this.updatePlayerMovement();
-        this.updateEnemies();
-        this.updateSpawner(delta);
-        this.updateAutoFire(time);
-        this.updateBullets(time);
+        this.updateMovement();
+        this.enemies.update(delta, this.elapsedMs);
+        this.bosses.update(this.elapsedMs);
+        //  시간 기준은 게임 경과 시간 (레벨업 일시정지 중에는 멈춰 있음)
+        this.weapons.forEach((weapon) => weapon.update(this.elapsedMs, delta));
+        this.experience.update();
         this.updateHud();
     }
 
     // ---------------------------------------------------------------- 플레이어
 
-    updatePlayerMovement ()
+    updateMovement ()
     {
         let dx = 0;
         let dy = 0;
@@ -130,231 +144,179 @@ export class Game extends Scene
         if (this.cursors.up.isDown || this.wasd.up.isDown) dy -= 1;
         if (this.cursors.down.isDown || this.wasd.down.isDown) dy += 1;
 
-        //  대각선 이동이 더 빨라지지 않도록 정규화
-        const velocity = new Phaser.Math.Vector2(dx, dy).normalize().scale(PLAYER_SPEED);
-        this.player.setVelocity(velocity.x, velocity.y);
-
-        if (dx !== 0)
-        {
-            this.player.setFlipX(dx < 0);
-        }
+        this.player.move(dx, dy);
     }
 
     onPlayerHit (damage: number)
     {
-        if (this.isGameOver || this.time.now < this.invulnUntil)
+        if (this.isGameOver || !this.player.takeDamage(damage))
         {
             return;
         }
 
-        this.hp = Math.max(0, this.hp - damage);
-        this.invulnUntil = this.time.now + PLAYER_INVULN_MS;
-
         this.cameras.main.shake(100, 0.005);
-        this.tweens.add({
-            targets: this.player,
-            alpha: 0.3,
-            duration: 80,
-            yoyo: true,
-            repeat: 2,
-            onComplete: () => this.player.setAlpha(1)
-        });
 
-        if (this.hp <= 0)
+        if (this.player.isDead)
         {
             this.endGame();
         }
     }
 
-    endGame ()
+    endGame (cleared = false)
     {
         this.isGameOver = true;
         this.physics.pause();
-        this.player.setTint(0xff0000);
+        if (!cleared)
+        {
+            this.player.setTint(0xff0000);
+        }
         this.updateHud();
 
-        const result: GameResult = { survivedMs: this.elapsedMs, kills: this.kills };
-        this.time.delayedCall(1000, () => this.scene.start('GameOver', result));
+        const result: GameResult = {
+            survivedMs: this.elapsedMs,
+            kills: this.kills,
+            level: this.experience.level,
+            cleared
+        };
+        if (cleared)
+        {
+            this.announce('CLEAR!', '#ffeb3b');
+        }
+        this.time.delayedCall(cleared ? 2000 : 1000, () => this.scene.start('GameOver', result));
     }
 
-    // ---------------------------------------------------------------- 적
+    // ---------------------------------------------------------------- 보스
 
-    updateSpawner (delta: number)
+    onBossKilled (boss: Boss)
     {
-        const elapsedSec = this.elapsedMs / 1000;
-        const interval = Math.max(
-            SPAWN_INTERVAL_MIN_MS,
-            SPAWN_INTERVAL_START_MS - elapsedSec * SPAWN_SPEEDUP_PER_SEC
-        );
+        this.kills++;
 
-        this.spawnAccMs += delta;
-        while (this.spawnAccMs >= interval)
+        if (boss.kind === 'final')
         {
-            this.spawnAccMs -= interval;
-            this.spawnEnemy();
+            this.endGame(true);
+            return;
+        }
+
+        this.experience.dropGem(boss.x, boss.y, boss.xp);
+    }
+
+    //  화면 가운데에 잠깐 떴다가 사라지는 알림 문구
+    announce (message: string, color: string)
+    {
+        const text = this.add.text(this.scale.width / 2, this.scale.height / 2 - 140, message, {
+            fontFamily: 'Arial Black', fontSize: 40, color,
+            stroke: '#000000', strokeThickness: 8
+        }).setOrigin(0.5).setScrollFactor(0).setDepth(150);
+
+        this.tweens.add({
+            targets: text,
+            alpha: 0,
+            y: text.y - 30,
+            delay: 1200,
+            duration: 600,
+            onComplete: () => text.destroy()
+        });
+    }
+
+    // ---------------------------------------------------------------- 무기 / 레벨업
+
+    createWeapon (id: WeaponId): Weapon
+    {
+        const ctx: WeaponContext = { scene: this, player: this.player, stats: this.stats, targets: this.targets };
+        switch (id)
+        {
+            case 'magicBolt': return new MagicBolt(ctx);
         }
     }
 
-    spawnEnemy ()
+    onLevelUp ()
     {
-        //  화면 바로 바깥의 원 위에서 랜덤 위치에 생성
-        const angle = Phaser.Math.FloatBetween(0, Math.PI * 2);
-        const distance = Math.hypot(this.scale.width, this.scale.height) / 2 + 40;
-        const x = Phaser.Math.Clamp(this.player.x + Math.cos(angle) * distance, 0, WORLD_SIZE);
-        const y = Phaser.Math.Clamp(this.player.y + Math.sin(angle) * distance, 0, WORLD_SIZE);
-
-        const enemy = this.enemies.get(x, y, 'enemy') as Sprite | null;
-        if (!enemy)
+        this.pendingLevelUps++;
+        if (this.pendingLevelUps > 1)
         {
-            return;     //  풀이 가득 참 (최대 마릿수 도달)
+            return;     //  이미 레벨업 화면이 열려 있음 -> 선택이 끝나면 이어서 표시됨
         }
 
-        enemy.enableBody(true, x, y, true, true);
-        enemy.clearTint();
-        enemy.setData('hp', ENEMY_HP);
+        const data: LevelUpData = {
+            choices: rollUpgradeChoices(this.weapons, this.stats),
+            onPick: (choice) => this.onUpgradePicked(choice)
+        };
+        this.scene.pause();
+        this.scene.launch('LevelUp', data);
     }
 
-    updateEnemies ()
+    //  카드를 골랐을 때. 레벨업이 더 남아 있으면 다음 카드 목록을 돌려준다
+    onUpgradePicked (choice: UpgradeChoice): UpgradeChoice[] | null
     {
-        for (const obj of this.enemies.getChildren())
+        this.applyUpgrade(choice);
+        this.pendingLevelUps--;
+        this.updateHud();
+
+        if (this.pendingLevelUps > 0)
         {
-            const enemy = obj as Sprite;
-            if (enemy.active)
+            return rollUpgradeChoices(this.weapons, this.stats);
+        }
+
+        this.scene.resume();
+        return null;
+    }
+
+    applyUpgrade (choice: UpgradeChoice)
+    {
+        switch (choice.kind)
+        {
+            case 'weapon':
             {
-                this.physics.moveToObject(enemy, this.player, ENEMY_SPEED);
+                const owned = this.weapons.find((w) => w.id === choice.id);
+                if (owned)
+                {
+                    owned.levelUp();
+                }
+                else
+                {
+                    this.weapons.push(this.createWeapon(choice.id));
+                }
+                break;
             }
-        }
-    }
-
-    onBulletHitEnemy (bullet: Sprite, enemy: Sprite)
-    {
-        if (!bullet.active || !enemy.active)
-        {
-            return;
-        }
-
-        bullet.disableBody(true, true);
-
-        const hp = (enemy.getData('hp') as number) - BULLET_DAMAGE;
-        enemy.setData('hp', hp);
-
-        if (hp <= 0)
-        {
-            enemy.disableBody(true, true);
-            this.kills++;
-            return;
-        }
-
-        //  피격 시 잠깐 하얗게 번쩍
-        enemy.setTintFill(0xffffff);
-        this.time.delayedCall(60, () => enemy.clearTint());
-    }
-
-    // ---------------------------------------------------------------- 자동 공격
-
-    updateAutoFire (time: number)
-    {
-        if (time < this.nextFireAt)
-        {
-            return;
-        }
-
-        const target = this.findNearestEnemy(FIRE_RANGE);
-        if (!target)
-        {
-            return;
-        }
-
-        this.nextFireAt = time + FIRE_INTERVAL_MS;
-
-        const bullet = this.bullets.get(this.player.x, this.player.y, 'bullet') as Sprite | null;
-        if (!bullet)
-        {
-            return;
-        }
-
-        bullet.enableBody(true, this.player.x, this.player.y, true, true);
-        bullet.setData('expireAt', time + BULLET_LIFE_MS);
-        this.physics.moveToObject(bullet, target, BULLET_SPEED);
-    }
-
-    findNearestEnemy (maxDistance: number): Sprite | null
-    {
-        let nearest: Sprite | null = null;
-        let nearestDistSq = maxDistance * maxDistance;
-
-        for (const obj of this.enemies.getChildren())
-        {
-            const enemy = obj as Sprite;
-            if (!enemy.active)
-            {
-                continue;
-            }
-
-            const distSq = Phaser.Math.Distance.Squared(this.player.x, this.player.y, enemy.x, enemy.y);
-            if (distSq < nearestDistSq)
-            {
-                nearest = enemy;
-                nearestDistSq = distSq;
-            }
-        }
-
-        return nearest;
-    }
-
-    updateBullets (time: number)
-    {
-        for (const obj of this.bullets.getChildren())
-        {
-            const bullet = obj as Sprite;
-            if (bullet.active && time >= (bullet.getData('expireAt') as number))
-            {
-                bullet.disableBody(true, true);
-            }
+            case 'passive':
+                this.stats.levelUp(choice.id);
+                if (choice.id === 'heart')
+                {
+                    this.player.heal(PASSIVES.heart.perLevel);
+                }
+                break;
+            case 'heal':
+                this.player.heal(FALLBACK_HEAL);
+                break;
         }
     }
 
     // ---------------------------------------------------------------- HUD
 
-    createHud ()
-    {
-        const textStyle: Phaser.Types.GameObjects.Text.TextStyle = {
-            fontFamily: 'Arial Black', fontSize: 24, color: '#ffffff',
-            stroke: '#000000', strokeThickness: 5
-        };
-
-        //  setScrollFactor(0): 카메라가 움직여도 화면에 고정
-        this.hpBar = this.add.graphics().setScrollFactor(0).setDepth(100);
-
-        this.timerText = this.add.text(this.scale.width / 2, 20, '00:00', textStyle)
-            .setOrigin(0.5, 0).setScrollFactor(0).setDepth(100);
-
-        this.killText = this.add.text(this.scale.width - 20, 20, 'Kills: 0', textStyle)
-            .setOrigin(1, 0).setScrollFactor(0).setDepth(100);
-
-        this.updateHud();
-    }
-
     updateHud ()
     {
-        const barX = 20;
-        const barY = 20;
-        const barW = 200;
-        const barH = 20;
-
-        this.hpBar.clear();
-        this.hpBar.fillStyle(0x000000, 0.6).fillRect(barX - 2, barY - 2, barW + 4, barH + 4);
-        this.hpBar.fillStyle(0x43a047).fillRect(barX, barY, barW * (this.hp / PLAYER_MAX_HP), barH);
-
-        this.timerText.setText(formatTime(this.elapsedMs));
-        this.killText.setText(`Kills: ${this.kills}`);
+        this.hud.update({
+            hp: this.player.hp,
+            maxHp: this.stats.maxHp,
+            playerX: this.player.x,
+            playerY: this.player.y,
+            level: this.experience.level,
+            xp: this.experience.xp,
+            xpToNext: this.experience.xpToNext,
+            elapsedMs: this.elapsedMs,
+            kills: this.kills,
+            build: this.buildSummary()
+        });
     }
-}
 
-export function formatTime (ms: number): string
-{
-    const totalSec = Math.floor(ms / 1000);
-    const min = Math.floor(totalSec / 60).toString().padStart(2, '0');
-    const sec = (totalSec % 60).toString().padStart(2, '0');
-    return `${min}:${sec}`;
+    //  "매직 볼트 Lv.2" / "신발 Lv.1  힘 Lv.2" 형태의 보유 목록
+    buildSummary (): string
+    {
+        const weapons = this.weapons.map((w) => `${w.name} Lv.${w.level}`).join('  ');
+        const passives = PASSIVE_IDS
+            .filter((id) => this.stats.level(id) > 0)
+            .map((id) => `${PASSIVES[id].name} Lv.${this.stats.level(id)}`)
+            .join('  ');
+        return passives ? `${weapons}\n${passives}` : weapons;
+    }
 }

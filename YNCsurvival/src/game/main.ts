@@ -2,6 +2,7 @@ import { Boot } from './scenes/Boot';
 import { ChatOverlay } from './scenes/ChatOverlay';
 import { GameOver } from './scenes/GameOver';
 import { Game as MainGame } from './scenes/Game';
+import { LevelUp } from './scenes/LevelUp';
 import { MainMenu } from './scenes/MainMenu';
 import { AUTO, Game } from 'phaser';
 import { Preloader } from './scenes/Preloader';
@@ -27,6 +28,7 @@ const config: Phaser.Types.Core.GameConfig = {
         MainMenu,
         MainGame,
         GameOver,
+        LevelUp,        //  Game 위에 겹쳐 그려지도록 Game 뒤에 둔다
         ChatOverlay     //  항상 맨 위에 그려지도록 마지막에 둔다
     ]
 };
