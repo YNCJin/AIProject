@@ -2,6 +2,7 @@ import { WEAPONS, WeaponId } from '../data/weapons';
 import { Player } from '../entities/Player';
 import { Targets } from '../systems/Targets';
 import { PlayerStats } from '../systems/PlayerStats';
+import { Lighting } from '../world/Lighting';
 
 //  무기가 게임에서 필요로 하는 것들
 export interface WeaponContext
@@ -10,6 +11,7 @@ export interface WeaponContext
     player: Player;
     stats: PlayerStats;
     targets: Targets;      //  일반 몬스터 + 보스
+    lighting: Lighting;    //  등불 빛 (등불의 온기가 사용)
 }
 
 //  모든 무기의 공통 부모. 새 무기는 이 클래스를 상속해서 update() 만 구현하면 된다

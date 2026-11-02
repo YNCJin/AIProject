@@ -1,9 +1,10 @@
-import { XP, xpToNextLevel } from '../config';
+import { DEPTH, XP, xpToNextLevel } from '../config';
 import { Player } from '../entities/Player';
 
 type Sprite = Phaser.Physics.Arcade.Sprite;
 
-//  경험치 보석 드롭 / 흡수 / 레벨 계산
+//  경험치 불씨 드롭 / 흡수 / 레벨 계산 (텍스처 키는 gem / gemBig)
+//  불씨는 어둠 위에 그려져서 빛 밖에서도 반짝인다
 export class Experience
 {
     level = 1;
@@ -24,24 +25,48 @@ export class Experience
         return xpToNextLevel(this.level);
     }
 
-    dropGem (x: number, y: number, value: number)
+    dropGem (x: number, y: number, value: number): Sprite | null
     {
         const texture = value >= 10 ? 'gemBig' : 'gem';
         const gem = this.gems.get(x, y, texture) as Sprite | null;
         if (!gem)
         {
-            return;     //  바닥에 보석이 너무 많음
+            return null;    //  바닥에 불씨가 너무 많음
         }
 
         gem.setTexture(texture);    //  풀에서 재사용된 보석은 이전 텍스처가 남아 있을 수 있음
         gem.enableBody(true, x, y, true, true);
         gem.setData('value', value);
-        gem.setDepth(5);
+        gem.setDepth(DEPTH.embers);
+        return gem;
+    }
+
+    //  나방 여왕 처치 시: 날개에서 불씨가 쏟아짐 (경험치 1짜리 count 개를 주변에 흩뿌림)
+    burst (x: number, y: number, count: number)
+    {
+        for (let i = 0; i < count; i++)
+        {
+            const gem = this.dropGem(x, y, 1);
+            if (!gem)
+            {
+                return;
+            }
+            const angle = Math.random() * Math.PI * 2;
+            const dist = 30 + Math.random() * 90;
+            this.scene.tweens.add({
+                targets: gem,
+                x: x + Math.cos(angle) * dist,
+                y: y + Math.sin(angle) * dist,
+                duration: 400 + Math.random() * 300,
+                ease: 'Cubic.easeOut'
+            });
+        }
     }
 
     update ()
     {
         const magnetSq = XP.magnetRadius * XP.magnetRadius;
+        const despawnSq = XP.despawnDistance * XP.despawnDistance;
         const collectSq = XP.collectRadius * XP.collectRadius;
 
         for (const obj of this.gems.getChildren())
@@ -61,6 +86,10 @@ export class Experience
             else if (distSq <= magnetSq)
             {
                 this.scene.physics.moveToObject(gem, this.player, XP.pullSpeed);
+            }
+            else if (distSq > despawnSq)
+            {
+                gem.disableBody(true, true);    //  맵이 끝없으므로 너무 멀리 남겨진 불씨는 정리
             }
             else
             {

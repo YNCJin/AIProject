@@ -64,7 +64,7 @@ export class Hud
 
         this.xpBar.clear();
         this.xpBar.fillStyle(0x000000, 0.6).fillRect(0, 0, width, XP_BAR_HEIGHT);
-        this.xpBar.fillStyle(0x42a5f5).fillRect(0, 0, width * (state.xp / state.xpToNext), XP_BAR_HEIGHT);
+        this.xpBar.fillStyle(0xffb347).fillRect(0, 0, width * (state.xp / state.xpToNext), XP_BAR_HEIGHT);
 
         const x = state.playerX - HP_BAR_WIDTH / 2;
         const y = state.playerY + HP_BAR_OFFSET_Y;

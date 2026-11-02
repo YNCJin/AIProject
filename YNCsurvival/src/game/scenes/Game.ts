@@ -1,5 +1,6 @@
 import { Scene } from 'phaser';
-import { ENEMY, FALLBACK_HEAL, SHOW_DEBUG_BUTTONS, WORLD_SIZE } from '../config';
+import { PALETTE } from '../art/Textures';
+import { DEPTH, FALLBACK_HEAL, LIGHT, MOTH, SHOW_DEBUG_BUTTONS } from '../config';
 import { PASSIVE_IDS, PASSIVES } from '../data/passives';
 import { WeaponId } from '../data/weapons';
 import { Boss } from '../entities/Boss';
@@ -7,13 +8,18 @@ import { Player } from '../entities/Player';
 import { BossManager } from '../systems/BossManager';
 import { EnemySpawner } from '../systems/EnemySpawner';
 import { Experience } from '../systems/Experience';
+import { Hazards, HitEffects } from '../systems/Hazards';
 import { PlayerStats } from '../systems/PlayerStats';
 import { Targets } from '../systems/Targets';
 import { rollUpgradeChoices, UpgradeChoice } from '../systems/Upgrades';
 import { createDebugButtons } from '../ui/DebugButtons';
 import { Hud } from '../ui/Hud';
-import { MagicBolt } from '../weapons/MagicBolt';
+import { EmberPool } from '../weapons/EmberPool';
+import { EmberShot } from '../weapons/EmberShot';
+import { LanternAura } from '../weapons/LanternAura';
 import { Weapon, WeaponContext } from '../weapons/Weapon';
+import { InfiniteBackground } from '../world/InfiniteBackground';
+import { Lighting } from '../world/Lighting';
 import { LevelUpData } from './LevelUp';
 
 export interface GameResult
@@ -21,16 +27,21 @@ export interface GameResult
     survivedMs: number;
     kills: number;
     level: number;
-    cleared: boolean;   //  최종 보스 처치 여부
+    cleared: boolean;   //  긴 밤(최종 보스) 처치 여부
 }
 
-//  게임 본체: 각 시스템을 만들고 연결하는 역할만 한다
-//  세부 동작은 entities / systems / weapons / ui 폴더 참고
+const DAWN_MS = 2500;
+
+//  「마지막 등불」 게임 본체: 각 시스템을 만들고 연결하는 역할만 한다
+//  세부 동작은 art / world / entities / systems / weapons / ui 폴더 참고
 export class Game extends Scene
 {
+    background: InfiniteBackground;
+    lighting: Lighting;
     stats: PlayerStats;
     player: Player;
     enemies: EnemySpawner;
+    hazards: Hazards;
     bosses: BossManager;
     targets: Targets;
     experience: Experience;
@@ -58,40 +69,38 @@ export class Game extends Scene
         this.pendingLevelUps = 0;
         this.isGameOver = false;
 
-        //  월드 & 바닥
-        this.physics.world.setBounds(0, 0, WORLD_SIZE, WORLD_SIZE);
-        this.add.tileSprite(0, 0, WORLD_SIZE, WORLD_SIZE, 'ground').setOrigin(0);
+        //  끝없이 이어지는 밤의 대지 (배경 이미지 몇 장을 재배치해서 재사용)
+        this.cameras.main.setBackgroundColor(PALETTE.night);
+        this.background = new InfiniteBackground(this);
 
-        //  플레이어
+        //  등불지기
         this.stats = new PlayerStats();
-        this.player = new Player(this, WORLD_SIZE / 2, WORLD_SIZE / 2, this.stats);
-        this.cameras.main.setBounds(0, 0, WORLD_SIZE, WORLD_SIZE);
+        this.player = new Player(this, 0, 0, this.stats);
         this.cameras.main.startFollow(this.player, true);
+        this.lighting = new Lighting(this);
 
-        //  적 / 경험치
+        //  그을린 짐승 / 경험치 불씨
         this.enemies = new EnemySpawner(this, this.player, (x, y, xp) => {
             this.kills++;
             this.experience.dropGem(x, y, xp);
         });
         this.experience = new Experience(this, this.player, () => this.onLevelUp());
 
-        //  보스 (중간 보스 / 최종 보스)
-        this.bosses = new BossManager(this, this.player, {
-            onHitPlayer: (damage) => this.onPlayerHit(damage),
-            onBossSpawned: (boss) => this.announce(
-                boss.kind === 'final' ? '최종 보스 등장!' : '중간 보스 등장!',
-                boss.kind === 'final' ? '#ff5252' : '#ce93d8'
-            ),
-            onBossKilled: (boss) => this.onBossKilled(boss)
+        //  보스 (밀랍 순례자 / 재의 나방 여왕 / 긴 밤) 와 보스 공격
+        this.hazards = new Hazards(this, this.player, (damage, effects) => this.onPlayerHit(damage, effects));
+        this.bosses = new BossManager(this, this.player, this.hazards, this.lighting, {
+            onBossSpawned: (boss) => this.onBossSpawned(boss),
+            onBossKilled: (boss) => this.onBossKilled(boss),
+            announce: (message, color) => this.announce(message, color)
         });
         this.targets = new Targets(this.enemies, this.bosses);
 
-        //  무기 (시작 무기: 매직 볼트)
-        this.weapons = [this.createWeapon('magicBolt')];
+        //  무기 (시작 무기: 불씨 탄)
+        this.weapons = [this.createWeapon('emberShot')];
 
-        //  적 / 보스와 닿으면 피해
-        this.physics.add.overlap(this.player, this.enemies.group, () => {
-            this.onPlayerHit(ENEMY.contactDamage);
+        //  짐승 / 보스와 닿으면 피해
+        this.physics.add.overlap(this.player, this.enemies.group, (_player, enemy) => {
+            this.onPlayerHit(this.enemies.contactDamage(enemy as Phaser.Physics.Arcade.Sprite));
         });
         this.physics.add.overlap(this.player, this.bosses.group, (_player, boss) => {
             this.onPlayerHit((boss as Boss).contactDamage);
@@ -103,15 +112,21 @@ export class Game extends Scene
         this.wasd = keyboard.addKeys({ up: 'W', down: 'S', left: 'A', right: 'D' }) as Game['wasd'];
 
         this.hud = new Hud(this);
+        this.updateWorld();
         this.updateHud();
 
         if (SHOW_DEBUG_BUTTONS)
         {
             createDebugButtons(this, [
-                { label: '중간 보스 소환', onClick: () => this.bosses.spawnMidBoss() ?? this.announce('중간 보스 최대 수 도달', '#b0bec5') },
-                { label: '최종 보스 소환', onClick: () => this.bosses.spawnFinalBoss() ?? this.announce('최종 보스가 이미 있음', '#b0bec5') }
+                { label: '밀랍 순례자 소환', onClick: () => this.bosses.spawnPilgrim() ?? this.announce('지금은 소환할 수 없음', '#b0bec5') },
+                { label: '나방 여왕 (후원 5천원)', onClick: () => this.onDonation(5_000, '테스트') },
+                { label: '나방 여왕 (후원 5만원)', onClick: () => this.onDonation(50_000, '테스트') },
+                { label: '긴 밤 소환', onClick: () => this.bosses.spawnFinal() ?? this.announce('긴 밤이 이미 와 있음', '#b0bec5') },
+                { label: '긴 밤 다음 페이즈', onClick: () => this.bosses.finalBoss?.skipPhase() }
             ]);
         }
+
+        this.announce('마지막 등불이 꺼지기 전에', '#ffd27a');
     }
 
     update (_time: number, delta: number)
@@ -122,14 +137,25 @@ export class Game extends Scene
         }
 
         this.elapsedMs += delta;
+        const now = this.elapsedMs;     //  시간 기준은 게임 경과 시간 (레벨업 일시정지 중에는 멈춰 있음)
 
         this.updateMovement();
-        this.enemies.update(delta, this.elapsedMs);
-        this.bosses.update(this.elapsedMs);
-        //  시간 기준은 게임 경과 시간 (레벨업 일시정지 중에는 멈춰 있음)
-        this.weapons.forEach((weapon) => weapon.update(this.elapsedMs, delta));
+        this.enemies.update(delta, now);
+        this.bosses.update(now);
+        this.hazards.update(now);
+        this.weapons.forEach((weapon) => weapon.update(now, delta));
         this.experience.update();
+        this.updateWorld();
         this.updateHud();
+    }
+
+    //  배경 재배치 + 어둠/등불 (카메라가 플레이어를 정중앙에 두므로 화면 왼쪽 위 = 플레이어 - 화면 절반)
+    updateWorld ()
+    {
+        const viewX = this.player.x - this.scale.width / 2;
+        const viewY = this.player.y - this.scale.height / 2;
+        this.background.update(viewX, viewY);
+        this.lighting.update(this.elapsedMs, this.player.x, this.player.y, viewX, viewY);
     }
 
     // ---------------------------------------------------------------- 플레이어
@@ -147,13 +173,14 @@ export class Game extends Scene
         this.player.move(dx, dy);
     }
 
-    onPlayerHit (damage: number)
+    onPlayerHit (damage: number, effects: HitEffects = {})
     {
         if (this.isGameOver || !this.player.takeDamage(damage))
         {
             return;
         }
 
+        this.player.applyEffects(effects);
         this.cameras.main.shake(100, 0.005);
 
         if (this.player.isDead)
@@ -162,57 +189,110 @@ export class Game extends Scene
         }
     }
 
-    endGame (cleared = false)
+    //  등불이 꺼짐 (사망)
+    endGame ()
     {
         this.isGameOver = true;
         this.physics.pause();
-        if (!cleared)
-        {
-            this.player.setTint(0xff0000);
-        }
+        this.player.setTint(0x555566);
+        this.lighting.fadeDarkness(1, 900);
         this.updateHud();
 
-        const result: GameResult = {
-            survivedMs: this.elapsedMs,
-            kills: this.kills,
-            level: this.experience.level,
-            cleared
-        };
-        if (cleared)
-        {
-            this.announce('CLEAR!', '#ffeb3b');
-        }
-        this.time.delayedCall(cleared ? 2000 : 1000, () => this.scene.start('GameOver', result));
+        this.time.delayedCall(1200, () => this.scene.start('GameOver', this.result(false)));
     }
 
-    // ---------------------------------------------------------------- 보스
+    result (cleared: boolean): GameResult
+    {
+        return { survivedMs: this.elapsedMs, kills: this.kills, level: this.experience.level, cleared };
+    }
+
+    // ---------------------------------------------------------------- 보스 / 후원
+
+    //  후원이 들어왔을 때 (지금은 테스트 버튼, 나중에 미들웨어의 후원 이벤트와 연결)
+    onDonation (amount: number, donor?: string)
+    {
+        if (!this.bosses.spawnMothQueen(amount, donor))
+        {
+            this.announce('나방 여왕을 더 부를 수 없음', '#b0bec5');
+        }
+    }
+
+    onBossSpawned (boss: Boss)
+    {
+        switch (boss.kind)
+        {
+            case 'pilgrim':
+                this.announce('밀랍 순례자가 다가온다', '#efe3c4');
+                break;
+            case 'moth':
+                this.announce('재의 나방 여왕이 빛을 찾아왔다', '#d6d0de');
+                break;
+            case 'final':
+                //  1페이즈 시작: 화면 가장자리부터 어둠이 차오르고, 다른 몬스터는 모두 사라짐
+                this.announce('긴 밤이 내려온다', '#b39ddb');
+                this.enemies.clearAll();
+                this.enemies.spawning = false;
+                this.hazards.clear();
+                this.lighting.fadeDarkness(LIGHT.finalDarkness, 3000);
+                break;
+        }
+    }
 
     onBossKilled (boss: Boss)
     {
         this.kills++;
 
-        if (boss.kind === 'final')
+        switch (boss.kind)
         {
-            this.endGame(true);
-            return;
+            case 'pilgrim':
+                this.experience.dropGem(boss.x, boss.y, boss.xp);
+                break;
+            case 'moth':
+                //  날개에서 대량의 불씨가 쏟아짐 (일반 몬스터 30마리 분량)
+                this.experience.burst(boss.x, boss.y, MOTH.dropEmbers);
+                break;
+            case 'final':
+                this.playDawnEnding();
+                break;
         }
+    }
 
-        this.experience.dropGem(boss.x, boss.y, boss.xp);
+    //  엔딩: 화면 전체가 새벽빛으로 하얗게 덮임
+    playDawnEnding ()
+    {
+        this.isGameOver = true;
+        this.physics.pause();
+        this.hazards.clear();
+        this.lighting.fadeDarkness(0, DAWN_MS);
+
+        const { width, height } = this.scale;
+        const dawn = this.add.rectangle(0, 0, width, height, 0xfff4dc)
+            .setOrigin(0).setScrollFactor(0).setDepth(DEPTH.ending).setAlpha(0);
+        const title = this.add.text(width / 2, height / 2 - 20, '새벽', {
+            fontFamily: 'Arial Black', fontSize: 72, color: '#b8742a'
+        }).setOrigin(0.5).setScrollFactor(0).setDepth(DEPTH.ending).setAlpha(0);
+        const line = this.add.text(width / 2, height / 2 + 50, '등불의 불씨는 옛 태양의 마지막 조각이었다', {
+            fontFamily: 'Arial, sans-serif', fontSize: 22, color: '#8a5a2a'
+        }).setOrigin(0.5).setScrollFactor(0).setDepth(DEPTH.ending).setAlpha(0);
+
+        this.tweens.add({ targets: dawn, alpha: 1, duration: DAWN_MS, ease: 'Sine.easeIn' });
+        this.tweens.add({ targets: [title, line], alpha: 1, delay: DAWN_MS, duration: 1200 });
+        this.time.delayedCall(DAWN_MS + 3000, () => this.scene.start('GameOver', this.result(true)));
     }
 
     //  화면 가운데에 잠깐 떴다가 사라지는 알림 문구
     announce (message: string, color: string)
     {
-        const text = this.add.text(this.scale.width / 2, this.scale.height / 2 - 140, message, {
-            fontFamily: 'Arial Black', fontSize: 40, color,
-            stroke: '#000000', strokeThickness: 8
-        }).setOrigin(0.5).setScrollFactor(0).setDepth(150);
+        const text = this.add.text(this.scale.width / 2, this.scale.height / 2 - 150, message, {
+            fontFamily: 'Arial Black', fontSize: 34, color,
+            stroke: '#000000', strokeThickness: 7
+        }).setOrigin(0.5).setScrollFactor(0).setDepth(DEPTH.announce);
 
         this.tweens.add({
             targets: text,
             alpha: 0,
             y: text.y - 30,
-            delay: 1200,
+            delay: 1400,
             duration: 600,
             onComplete: () => text.destroy()
         });
@@ -222,10 +302,14 @@ export class Game extends Scene
 
     createWeapon (id: WeaponId): Weapon
     {
-        const ctx: WeaponContext = { scene: this, player: this.player, stats: this.stats, targets: this.targets };
+        const ctx: WeaponContext = {
+            scene: this, player: this.player, stats: this.stats, targets: this.targets, lighting: this.lighting
+        };
         switch (id)
         {
-            case 'magicBolt': return new MagicBolt(ctx);
+            case 'lanternAura': return new LanternAura(ctx);
+            case 'emberShot': return new EmberShot(ctx);
+            case 'emberPool': return new EmberPool(ctx);
         }
     }
 
@@ -309,7 +393,7 @@ export class Game extends Scene
         });
     }
 
-    //  "매직 볼트 Lv.2" / "신발 Lv.1  힘 Lv.2" 형태의 보유 목록
+    //  "불씨 탄 Lv.2" / "신발 Lv.1  힘 Lv.2" 형태의 보유 목록
     buildSummary (): string
     {
         const weapons = this.weapons.map((w) => `${w.name} Lv.${w.level}`).join('  ');

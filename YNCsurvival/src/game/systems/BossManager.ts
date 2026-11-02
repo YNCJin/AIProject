@@ -1,50 +1,36 @@
-import { FINAL_BOSS, MID_BOSS } from '../config';
-import { Boss, BossContext } from '../entities/Boss';
-import { FinalBoss } from '../entities/FinalBoss';
-import { MidBoss } from '../entities/MidBoss';
+import { FINAL, MOTH, PILGRIM } from '../config';
+import { AshMothQueen } from '../entities/AshMothQueen';
+import { Boss, BossContext, BossKind } from '../entities/Boss';
+import { LongNight } from '../entities/LongNight';
 import { Player } from '../entities/Player';
+import { WaxPilgrim } from '../entities/WaxPilgrim';
 import { pointAroundPlayer } from '../utils/spawn';
-
-type Sprite = Phaser.Physics.Arcade.Sprite;
+import { Lighting } from '../world/Lighting';
+import { Hazards } from './Hazards';
 
 export interface BossHandlers
 {
-    onHitPlayer: (damage: number) => void;
     onBossSpawned: (boss: Boss) => void;
     onBossKilled: (boss: Boss) => void;
+    announce: (message: string, color: string) => void;
 }
 
-//  보스 생성(자동 주기 / 수동 호출) / 갱신 / 보스 탄환 관리
-//  후원 전용 중간 보스, 시청자 이벤트 소환도 spawnMidBoss() / spawnFinalBoss() 를 호출하면 된다
+//  보스 생성(자동 주기 / 버튼 / 후원) / 갱신 / 처치 처리
+//  - 밀랍 순례자: 2분 30초마다 자동 등장 (최종 보스 등장 전까지)
+//  - 재의 나방 여왕: 후원 전용. spawnMothQueen(후원 금액, 후원자) 로만 등장
+//  - 긴 밤: 10분에 자동 등장, 등장하면 다른 보스와 짐승은 모두 사라짐
 export class BossManager
 {
     readonly group: Phaser.Physics.Arcade.Group;
-    private bullets: Phaser.Physics.Arcade.Group;
-    private nextMidSpawnAt = MID_BOSS.spawnIntervalMs;
+    private nextPilgrimAt = PILGRIM.spawnIntervalMs;
     private finalAutoSpawned = false;
     private now = 0;
     private ctx: BossContext;
 
-    constructor (scene: Phaser.Scene, private player: Player, private handlers: BossHandlers)
+    constructor (scene: Phaser.Scene, private player: Player, hazards: Hazards, lighting: Lighting, private handlers: BossHandlers)
     {
         this.group = scene.physics.add.group();
-        this.bullets = scene.physics.add.group({ maxSize: 200 });
-
-        this.ctx = {
-            scene,
-            player,
-            fireBullet: (x, y, angle) => this.fireBullet(x, y, angle),
-            hitPlayer: (damage) => handlers.onHitPlayer(damage)
-        };
-
-        scene.physics.add.overlap(player, this.bullets, (_player, bullet) => {
-            const b = bullet as Sprite;
-            if (b.active)
-            {
-                b.disableBody(true, true);
-                handlers.onHitPlayer(b.getData('damage') as number);
-            }
-        });
+        this.ctx = { scene, player, hazards, lighting, announce: handlers.announce };
     }
 
     //  now: 게임 경과 시간(ms)
@@ -52,52 +38,66 @@ export class BossManager
     {
         this.now = now;
 
-        //  자동 등장: 중간 보스는 최종 보스 등장 시간 전까지만 (10:00 에 둘이 겹치지 않게)
-        if (now >= this.nextMidSpawnAt && now < FINAL_BOSS.spawnAtMs)
+        if (now >= this.nextPilgrimAt && now < FINAL.spawnAtMs)
         {
-            this.spawnMidBoss();
+            this.spawnPilgrim();
         }
-        while (now >= this.nextMidSpawnAt)
+        while (now >= this.nextPilgrimAt)
         {
-            this.nextMidSpawnAt += MID_BOSS.spawnIntervalMs;    //  밀린 주기가 있어도 한 마리만
+            this.nextPilgrimAt += PILGRIM.spawnIntervalMs;    //  밀린 주기가 있어도 한 마리만
         }
-        if (!this.finalAutoSpawned && now >= FINAL_BOSS.spawnAtMs)
+
+        if (!this.finalAutoSpawned && now >= FINAL.spawnAtMs)
         {
             this.finalAutoSpawned = true;
-            this.spawnFinalBoss();
+            this.spawnFinal();
         }
 
         for (const boss of this.activeBosses())
         {
             boss.update(now);
         }
-
-        this.expireBullets(now);
     }
 
-    //  생성되면 보스를, 최대 수 제한에 걸리면 null 을 돌려준다
-    spawnMidBoss (): Boss | null
+    get finalBoss (): LongNight | undefined
     {
-        const alive = this.activeBosses().filter((b) => b.kind === 'mid').length;
-        if (alive >= MID_BOSS.maxAlive)
+        return this.activeBosses().find((b) => b.kind === 'final') as LongNight | undefined;
+    }
+
+    //  생성되면 보스를, 조건(최대 수, 최종 보스 진행 중)에 걸리면 null 을 돌려준다
+    spawnPilgrim (): Boss | null
+    {
+        if (this.finalBoss || this.count('pilgrim') >= PILGRIM.maxAlive)
         {
             return null;
         }
-
         const { x, y } = pointAroundPlayer(this.ctx.scene, this.player, 60);
-        return this.add(new MidBoss(this.ctx, x, y, this.now));
+        return this.add(new WaxPilgrim(this.ctx, x, y, this.now));
     }
 
-    //  최종 보스는 한 마리만
-    spawnFinalBoss (): Boss | null
+    //  후원 전용. 금액이 클수록 체력과 피해량 증가
+    spawnMothQueen (donation: number, donor?: string): Boss | null
     {
-        if (this.activeBosses().some((b) => b.kind === 'final'))
+        if (this.finalBoss || this.count('moth') >= MOTH.maxAlive)
         {
             return null;
         }
+        const { x, y } = pointAroundPlayer(this.ctx.scene, this.player, 60);
+        return this.add(new AshMothQueen(this.ctx, x, y, this.now, donation, donor));
+    }
 
-        const { x, y } = pointAroundPlayer(this.ctx.scene, this.player, 100);
-        return this.add(new FinalBoss(this.ctx, x, y, this.now));
+    spawnFinal (): Boss | null
+    {
+        if (this.finalBoss)
+        {
+            return null;
+        }
+        //  긴 밤이 오면 다른 보스는 보상 없이 사라짐
+        for (const boss of this.activeBosses())
+        {
+            this.group.remove(boss, true, true);
+        }
+        return this.add(new LongNight(this.ctx, this.now));
     }
 
     damage (boss: Boss, amount: number)
@@ -110,7 +110,7 @@ export class BossManager
         if (boss.takeDamage(amount))
         {
             this.group.remove(boss, true, true);
-            this.handlers.onBossKilled(boss);
+            this.handlers.onBossKilled(boss);   //  destroy 후에도 x, y, kind 값은 남아 있음
         }
     }
 
@@ -119,37 +119,15 @@ export class BossManager
         return this.group.getChildren().filter((b) => b.active) as Boss[];
     }
 
+    private count (kind: BossKind): number
+    {
+        return this.activeBosses().filter((b) => b.kind === kind).length;
+    }
+
     private add (boss: Boss): Boss
     {
         this.group.add(boss);
         this.handlers.onBossSpawned(boss);
         return boss;
-    }
-
-    private fireBullet (x: number, y: number, angle: number)
-    {
-        const bullet = this.bullets.get(x, y, 'bossBullet') as Sprite | null;
-        if (!bullet)
-        {
-            return;
-        }
-
-        bullet.enableBody(true, x, y, true, true);
-        bullet.setDepth(8);
-        bullet.setData('damage', MID_BOSS.bulletDamage);
-        bullet.setData('expireAt', this.now + MID_BOSS.bulletLifeMs);
-        this.ctx.scene.physics.velocityFromRotation(angle, MID_BOSS.bulletSpeed, bullet.body!.velocity);
-    }
-
-    private expireBullets (now: number)
-    {
-        for (const obj of this.bullets.getChildren())
-        {
-            const bullet = obj as Sprite;
-            if (bullet.active && now >= (bullet.getData('expireAt') as number))
-            {
-                bullet.disableBody(true, true);
-            }
-        }
     }
 }

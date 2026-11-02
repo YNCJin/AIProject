@@ -1,12 +1,11 @@
 import { Scene } from 'phaser';
+import { PALETTE } from '../art/Textures';
 import { formatTime } from '../utils/format';
 import { GameResult } from './Game';
 
+//  결과 화면: 등불이 꺼짐(사망) / 새벽(긴 밤 처치)
 export class GameOver extends Scene
 {
-    camera: Phaser.Cameras.Scene2D.Camera;
-    background: Phaser.GameObjects.Image;
-    gameover_text : Phaser.GameObjects.Text;
     result: GameResult;
 
     constructor ()
@@ -21,30 +20,31 @@ export class GameOver extends Scene
 
     create ()
     {
-        this.camera = this.cameras.main
-        this.camera.setBackgroundColor(this.result.cleared ? 0x2e7d32 : 0xff0000);
+        const { width } = this.scale;
+        const cleared = this.result.cleared;
 
-        this.background = this.add.image(512, 384, 'background');
-        this.background.setAlpha(0.5);
+        this.cameras.main.setBackgroundColor(cleared ? 0xfff4dc : PALETTE.darkness);
 
-        this.gameover_text = this.add.text(512, 300, this.result.cleared ? 'CLEAR!' : 'Game Over', {
-            fontFamily: 'Arial Black', fontSize: 64, color: '#ffffff',
-            stroke: '#000000', strokeThickness: 8,
-            align: 'center'
-        });
-        this.gameover_text.setOrigin(0.5);
+        this.add.text(width / 2, 260, cleared ? '새벽' : '등불이 꺼졌다', {
+            fontFamily: 'Arial Black', fontSize: 64, color: cleared ? '#b8742a' : '#8a82a8',
+            stroke: cleared ? '#ffffff' : '#000000', strokeThickness: 6
+        }).setOrigin(0.5);
 
-        this.add.text(512, 430,
+        if (cleared)
+        {
+            this.add.text(width / 2, 330, '등불을 지키던 사람은, 마침내 등불 그 자체가 되었다.', {
+                fontFamily: 'Arial, sans-serif', fontSize: 20, color: '#8a5a2a'
+            }).setOrigin(0.5);
+        }
+
+        const color = cleared ? '#5a3a1a' : '#e8e2f0';
+        this.add.text(width / 2, 450,
             `생존 시간: ${formatTime(this.result.survivedMs)}\n레벨: ${this.result.level}\n처치 수: ${this.result.kills}\n\n클릭하여 메인 메뉴로`, {
-            fontFamily: 'Arial Black', fontSize: 28, color: '#ffffff',
-            stroke: '#000000', strokeThickness: 6,
-            align: 'center'
+            fontFamily: 'Arial Black', fontSize: 26, color, align: 'center', lineSpacing: 6
         }).setOrigin(0.5);
 
         this.input.once('pointerdown', () => {
-
             this.scene.start('MainMenu');
-
         });
     }
 }
