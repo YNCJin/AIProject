@@ -12,10 +12,6 @@ const WRAP_WIDTH = 440;
 //  채팅 앞에 붙는 출처 표시
 const PLATFORM_TAG: Record<string, string> = { chzzk: '[치지직] ', discord: '[디코] ' };
 
-//  후원이 들어오면 게임 전체에 알리는 이벤트 이름
-//  Game 씬이 받아서 나방 여왕 소환. 단, AI 서버(StreamDirector)가 연결돼 있으면 AI 가 판단해서 소환하므로 무시
-export const DONATION_EVENT = 'donation';
-
 //  메인 메뉴 / 게임 / 게임오버 어느 화면에서든 위에 떠 있는 채팅 오버레이
 //  Preloader에서 launch 되며, scene 목록 마지막에 있어서 항상 맨 위에 그려진다
 export class ChatOverlay extends Scene
@@ -38,10 +34,10 @@ export class ChatOverlay extends Scene
         this.client = new ChatClient(MIDDLEWARE_WS_URL, {
             onChat: (message) => this.addLine(`${PLATFORM_TAG[message.platform] ?? ''}${message.user}: ${message.text}`,
                 message.filtered ? '#9e9e9e' : '#ffffff'),
+            //  후원은 표시만 한다. 나방 여왕 소환은 AI 서버가 spawn_boss 이벤트로 보내면 systems/AudienceEvents.ts 가 처리
             onDonation: (message) => {
                 const text = message.text ? ` - ${message.text}` : '';
                 this.addLine(`[후원] ${message.user}님 ${message.amount.toLocaleString()}원${text}`, '#ffd27a');
-                this.game.events.emit(DONATION_EVENT, message);
             },
             onEvent: (message) => this.addLine(`[AI] ${message.overlay_text}`, '#e1bee7'),
             onStatus: (connected) => {

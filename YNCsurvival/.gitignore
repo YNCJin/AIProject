@@ -23,7 +23,7 @@ dist-ssr
 *.sln
 *.sw?
 
-# Python 미들웨어
+# Python (예전 middleware 폴더의 로컬 파일 포함 - 토큰이 올라가지 않도록 유지)
 .venv
 __pycache__
 .env

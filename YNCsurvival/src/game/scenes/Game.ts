@@ -22,8 +22,6 @@ import { LanternAura } from '../weapons/LanternAura';
 import { Weapon, WeaponContext } from '../weapons/Weapon';
 import { InfiniteBackground } from '../world/InfiniteBackground';
 import { Lighting } from '../world/Lighting';
-import { DonationMessage } from '../net/ChatClient';
-import { DONATION_EVENT } from './ChatOverlay';
 import { LevelUpData } from './LevelUp';
 import { AudienceEvent, getStreamDirector, StreamDirectorClient } from '../net/StreamDirectorClient';
 import { AudienceEvents } from '../systems/AudienceEvents';
@@ -159,17 +157,6 @@ export class Game extends Scene
                 { label: 'AI: 후원 1만원 "보스"', onClick: () => this.simulateDonation(10_000, '보스 소환해줘') }
             ]);
         }
-
-        //  방송 후원(치지직 등)이 들어오면 나방 여왕 소환
-        //  AI 서버가 연결돼 있으면 후원도 AI 를 거쳐 spawn_boss 이벤트로 오므로 여기서는 소환하지 않음 (중복 소환 방지)
-        const onDonationEvent = (message: DonationMessage) => {
-            if (!this.ai?.connected)
-            {
-                this.onDonation(message.amount, message.user);
-            }
-        };
-        this.game.events.on(DONATION_EVENT, onDonationEvent);
-        this.events.once(Phaser.Scenes.Events.SHUTDOWN, () => this.game.events.off(DONATION_EVENT, onDonationEvent));
 
         this.events.on(Phaser.Scenes.Events.POST_UPDATE, this.lateUpdate, this);
         this.events.once(Phaser.Scenes.Events.SHUTDOWN, () => this.events.off(Phaser.Scenes.Events.POST_UPDATE, this.lateUpdate, this));

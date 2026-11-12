@@ -1,6 +1,5 @@
 //  채팅 서버와 WebSocket으로 연결해서 화면에 띄울 메시지를 받는다
-//  기본: StreamDirector AI 서버의 채팅 오버레이 (ws://localhost:8765/ws)
-//  예전 미들웨어(middleware/server.py)를 쓰려면 .env.local 에 VITE_MIDDLEWARE_WS=ws://localhost:8000/ws
+//  StreamDirector AI 서버의 채팅 오버레이 (ws://localhost:8765/ws), 주소는 .env.local 의 VITE_MIDDLEWARE_WS 로 변경 가능
 export const MIDDLEWARE_WS_URL: string = import.meta.env.VITE_MIDDLEWARE_WS ?? 'ws://localhost:8765/ws';
 
 const RECONNECT_DELAY_MS = 3000;
@@ -8,7 +7,7 @@ const RECONNECT_DELAY_MS = 3000;
 export interface ChatMessage
 {
     type: 'chat';
-    platform: string;   //  'chzzk' | 'discord' | 'dummy' | 'manual'
+    platform: string;   //  'chzzk' | 'discord' | 'test' ...
     user: string;
     text: string;
     ts: number;
@@ -29,7 +28,7 @@ export interface EventNotice
 export interface DonationMessage
 {
     type: 'donation';
-    platform?: string;  //  'chzzk' | 'manual' (StreamDirector 서버는 보내지 않음)
+    platform?: string;
     user: string;
     amount: number;     //  원
     text: string;
