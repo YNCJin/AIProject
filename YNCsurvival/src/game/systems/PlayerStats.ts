@@ -7,6 +7,10 @@ export class PlayerStats
 {
     passiveLevels: Record<PassiveId, number> = { boots: 0, heart: 0, power: 0, clock: 0 };
 
+    //  시청자 이벤트(버프/디버프)로 잠시 바뀌는 배율 - systems/AudienceEvents.ts 가 켜고 끈다
+    tempSpeedMultiplier = 1;
+    tempDamageMultiplier = 1;
+
     level (id: PassiveId): number
     {
         return this.passiveLevels[id];
@@ -19,7 +23,7 @@ export class PlayerStats
 
     get moveSpeed (): number
     {
-        return PLAYER.baseSpeed * (1 + this.level('boots') * PASSIVES.boots.perLevel);
+        return PLAYER.baseSpeed * (1 + this.level('boots') * PASSIVES.boots.perLevel) * this.tempSpeedMultiplier;
     }
 
     get maxHp (): number
@@ -29,7 +33,7 @@ export class PlayerStats
 
     get damageMultiplier (): number
     {
-        return 1 + this.level('power') * PASSIVES.power.perLevel;
+        return (1 + this.level('power') * PASSIVES.power.perLevel) * this.tempDamageMultiplier;
     }
 
     get cooldownMultiplier (): number
