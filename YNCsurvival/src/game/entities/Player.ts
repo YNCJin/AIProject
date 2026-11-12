@@ -1,3 +1,4 @@
+import { ART_SCALE, artScale } from '../display';
 import { DEPTH, PLAYER } from '../config';
 import { HitEffects } from '../systems/Hazards';
 import { PlayerStats } from '../systems/PlayerStats';
@@ -22,8 +23,8 @@ export class Player extends Phaser.Physics.Arcade.Sprite
 
         this.stats = stats;
         this.hp = stats.maxHp;
-        this.setDepth(DEPTH.player);
-        this.body!.setSize(18, 30);
+        this.setDepth(DEPTH.player).setScale(artScale());
+        this.body!.setSize(18 * ART_SCALE, 30 * ART_SCALE);   //  몸통 판정 18x30 (텍스처 픽셀 기준이라 ART_SCALE 배)
     }
 
     //  등불이 있는 위치 (불씨 탄이 나가는 곳)

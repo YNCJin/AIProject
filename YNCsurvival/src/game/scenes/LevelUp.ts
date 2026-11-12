@@ -1,3 +1,4 @@
+import { SCREEN, setupCamera } from '../display';
 import { Scene } from 'phaser';
 import { UpgradeChoice } from '../systems/Upgrades';
 
@@ -33,7 +34,8 @@ export class LevelUp extends Scene
 
     create ()
     {
-        const { width, height } = this.scale;
+        setupCamera(this);
+        const { width, height } = SCREEN;
 
         this.add.rectangle(0, 0, width, height, 0x000000, 0.6).setOrigin(0);
         this.add.text(width / 2, 150, 'LEVEL UP!', {
@@ -54,7 +56,7 @@ export class LevelUp extends Scene
         this.choices = choices;
         this.cards.forEach((card) => card.destroy());
 
-        const { width, height } = this.scale;
+        const { width, height } = SCREEN;
         const totalWidth = choices.length * CARD_WIDTH + (choices.length - 1) * CARD_GAP;
         const startX = (width - totalWidth) / 2 + CARD_WIDTH / 2;
 

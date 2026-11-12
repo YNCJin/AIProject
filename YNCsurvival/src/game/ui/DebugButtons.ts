@@ -1,3 +1,5 @@
+import { SCREEN } from '../display';
+
 export interface DebugButton
 {
     label: string;
@@ -11,7 +13,7 @@ const GAP = 8;
 //  config.ts 의 SHOW_DEBUG_BUTTONS 가 true 일 때만 Game 씬에서 생성됨
 export function createDebugButtons (scene: Phaser.Scene, buttons: DebugButton[])
 {
-    const { width, height } = scene.scale;
+    const { width, height } = SCREEN;
     let y = height - MARGIN;
 
     for (const button of [...buttons].reverse())

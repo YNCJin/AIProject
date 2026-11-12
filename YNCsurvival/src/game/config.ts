@@ -16,21 +16,55 @@ export const LIGHT = {
 
 //  일반 몬스터: 그을린 짐승 (들개 / 늑대)
 //  빛 밖에서는 눈만 보이고, 등불 범위에 들어오면 검은 연기 형체가 드러난다
+//  체력은 게임 시작 때 hpMin 에서 hpMaxAtMs(10분)까지 hpMax 로 서서히 오른다 (생성되는 순간의 시간 기준)
 export const BEASTS = {
-    dog: { hp: 30, speed: 85, contactDamage: 10, xp: 1 },
-    wolf: { hp: 45, speed: 100, contactDamage: 12, xp: 1 },
+    dog: { hpMin: 30, hpMax: 45, speed: 85, contactDamage: 10, xp: 1 },
+    wolf: { hpMin: 40, hpMax: 55, speed: 100, contactDamage: 12, xp: 1 },
+    hpMaxAtMs: 600_000,
     wolfRatioStart: 0.15,   //  시작 시 늑대 비율
     wolfRatioPerMin: 0.06,  //  1분마다 늘어나는 늑대 비율
     wolfRatioMax: 0.6,
     maxCount: 300,
 };
 
+export function beastHp (kind: 'dog' | 'wolf', elapsedMs: number): number
+{
+    const t = Math.min(1, elapsedMs / BEASTS.hpMaxAtMs);
+    return BEASTS[kind].hpMin + (BEASTS[kind].hpMax - BEASTS[kind].hpMin) * t;
+}
+
+//  초반 완화: 이 시간까지는 짐승이 조금 느리고, 생성 간격이 고정
+export const EARLY_GAME = {
+    untilMs: 90_000,        //  1분 30초
+    beastSpeedMult: 0.95,   //  이동 속도 -5%
+    spawnIntervalMs: 1200,  //  적 생성 간격 1.2초
+};
+
+//  적 생성 간격 시간표: 시점 사이는 서서히 변하고, 마지막 시점 이후로는 그대로 유지
+//  1분 30초까지 1.2초 고정 -> 3분 0.9초 -> 5분 0.15초(기존 후반 밀도, 초당 약 6~7마리) -> 이후 유지
 export const SPAWN = {
-    startIntervalMs: 1000,  //  시작 시 적 생성 간격
-    minIntervalMs: 150,     //  최소 생성 간격
-    speedupPerSec: 8,       //  1초마다 생성 간격이 줄어드는 양(ms)
+    intervalKeyframes: [
+        { atMs: 0, intervalMs: EARLY_GAME.spawnIntervalMs },
+        { atMs: EARLY_GAME.untilMs, intervalMs: EARLY_GAME.spawnIntervalMs },
+        { atMs: 180_000, intervalMs: 900 },
+        { atMs: 300_000, intervalMs: 150 },
+    ],
     recycleMargin: 300,     //  화면에서 이만큼 더 멀어진 짐승은 화면 가장자리로 다시 배치
 };
+
+export function spawnIntervalMs (elapsedMs: number): number
+{
+    const keys = SPAWN.intervalKeyframes;
+    for (let i = 1; i < keys.length; i++)
+    {
+        if (elapsedMs < keys[i].atMs)
+        {
+            const t = (elapsedMs - keys[i - 1].atMs) / (keys[i].atMs - keys[i - 1].atMs);
+            return keys[i - 1].intervalMs + (keys[i].intervalMs - keys[i - 1].intervalMs) * t;
+        }
+    }
+    return keys[keys.length - 1].intervalMs;
+}
 
 //  중간 보스: 밀랍 순례자 - 느리지만 매우 단단하고, 머리 위 심지에서 느린 밀랍 탄환을 쏴서 맞으면 둔화
 export const PILGRIM = {

@@ -1,3 +1,4 @@
+import { artScale, viewRect } from '../display';
 import { DEPTH } from '../config';
 import { Player } from '../entities/Player';
 
@@ -85,7 +86,7 @@ export class Hazards
         p.setTexture(opts.texture);
         p.enableBody(true, x, y, true, true);
         p.body!.setSize(p.width * 0.7, p.height * 0.7);
-        p.setDepth(DEPTH.projectile);
+        p.setDepth(DEPTH.projectile).setScale(artScale());
         p.setRotation(opts.rotate ? angle : 0);
         p.setData('damage', opts.damage);
         p.setData('effects', { slowFactor: opts.slowFactor, slowMs: opts.slowMs, stunMs: opts.stunMs });
@@ -235,7 +236,7 @@ export class Hazards
                 break;
             case 'full':
             {
-                const view = this.scene.cameras.main.worldView;
+                const view = viewRect(this.scene);
                 g.fillRect(view.x, view.y, view.width, view.height * progress);
                 break;
             }
@@ -260,7 +261,7 @@ export class Hazards
                 break;
             case 'full':
             {
-                const view = this.scene.cameras.main.worldView;
+                const view = viewRect(this.scene);
                 g.strokeRect(view.x + 4, view.y + 4, view.width - 8, view.height - 8);
                 break;
             }

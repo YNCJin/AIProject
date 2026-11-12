@@ -1,3 +1,4 @@
+import { ART_SCALE, artScale } from '../display';
 import { DEPTH, MOTH } from '../config';
 import { Boss, BossContext } from './Boss';
 
@@ -26,7 +27,7 @@ export class AshMothQueen extends Boss
         const damageMult = Math.min(MOTH.damageMultMax, 1 + donation * MOTH.damagePerWon);
         this.donation = donation;
         this.contactDamage = Math.round(MOTH.contactDamage * damageMult);
-        this.body!.setSize(80, 50);
+        this.body!.setSize(80 * ART_SCALE, 50 * ART_SCALE);
         this.nextAshAt = now + 3000;
         this.nextDashAt = now + MOTH.dashIntervalMs;
 
@@ -34,13 +35,13 @@ export class AshMothQueen extends Boss
         this.showLabel(`재의 나방 여왕\n${who}후원 ${donation.toLocaleString()}원`);
 
         //  날갯짓
-        this.scene.tweens.add({ targets: this, scaleY: 0.82, duration: 160, yoyo: true, repeat: -1 });
+        this.scene.tweens.add({ targets: this, scaleY: artScale(0.82), duration: 160, yoyo: true, repeat: -1 });
 
         this.ash = this.scene.add.particles(0, 0, 'ash', {
             speed: { min: 40, max: 180 },
             lifespan: { min: 900, max: 1600 },
             alpha: { start: 0.9, end: 0 },
-            scale: { start: 1.4, end: 0.4 },
+            scale: { start: artScale(1.4), end: artScale(0.4) },
             emitting: false
         }).setDepth(DEPTH.projectile);
     }
@@ -79,8 +80,6 @@ export class AshMothQueen extends Boss
                 }
                 break;
         }
-
-        this.drawHpBar();
     }
 
     private scatterAsh (now: number)

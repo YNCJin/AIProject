@@ -1,8 +1,10 @@
+import { sound } from '../audio/Sound';
+import { ART_SCALE } from '../display';
 import { DEPTH } from '../config';
 import { EMBER_POOL, EMBER_POOL_LEVELS } from '../data/weapons';
 import { Weapon } from './Weapon';
 
-const POOL_TEXTURE_SIZE = 128;
+const POOL_TEXTURE_SIZE = 128 * ART_SCALE;
 const MAX_TARGETS = 999;
 
 interface Pool
@@ -39,6 +41,7 @@ export class EmberPool extends Weapon
         {
             this.cast(level.radius, level.damage * this.ctx.stats.damageMultiplier, time);
         }
+        sound.play('poolCast');
     }
 
     private cast (radius: number, damage: number, time: number)
@@ -70,6 +73,7 @@ export class EmberPool extends Weapon
                 continue;
             }
 
+            sound.play('poolIgnite');
             targets.findNearest(pool.x, pool.y, pool.radius, MAX_TARGETS)
                 .forEach((target) => targets.damage(target, pool.damage));
 

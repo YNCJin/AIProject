@@ -1,3 +1,4 @@
+import { sound } from '../audio/Sound';
 import { Boss } from '../entities/Boss';
 import { BossManager } from './BossManager';
 import { EnemySpawner } from './EnemySpawner';
@@ -22,10 +23,12 @@ export class Targets
     {
         if (target instanceof Boss)
         {
+            sound.play('bossHit');
             this.bosses.damage(target, amount);
         }
         else
         {
+            sound.play('hit');
             this.enemies.damage(target, amount);
         }
     }

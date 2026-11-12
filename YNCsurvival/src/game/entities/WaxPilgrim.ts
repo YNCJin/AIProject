@@ -1,3 +1,4 @@
+import { ART_SCALE, artScale } from '../display';
 import { PILGRIM_WICK_OFFSET_Y } from '../art/Textures';
 import { PILGRIM } from '../config';
 import { Boss, BossContext } from './Boss';
@@ -15,7 +16,7 @@ export class WaxPilgrim extends Boss
         super(ctx, x, y, 'pilgrim', PILGRIM.hp);
         this.xp = PILGRIM.xp;
         this.contactDamage = PILGRIM.contactDamage;
-        this.body!.setSize(30, 52);
+        this.body!.setSize(30 * ART_SCALE, 52 * ART_SCALE);
         this.nextFireAt = now + PILGRIM.fireIntervalMs;
     }
 
@@ -30,7 +31,6 @@ export class WaxPilgrim extends Boss
             this.fireWax();
         }
 
-        this.drawHpBar();
     }
 
     private fireWax ()
@@ -52,6 +52,6 @@ export class WaxPilgrim extends Boss
         }
 
         //  쏘는 순간 몸이 살짝 늘어났다 돌아옴
-        this.scene.tweens.add({ targets: this, scaleY: 1.12, duration: 90, yoyo: true });
+        this.scene.tweens.add({ targets: this, scaleY: artScale(1.12), duration: 90, yoyo: true });
     }
 }

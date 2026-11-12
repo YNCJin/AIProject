@@ -1,3 +1,5 @@
+import { sound } from '../audio/Sound';
+import { artScale, SCREEN, setupCamera } from '../display';
 import { Scene } from 'phaser';
 import { PALETTE } from '../art/Textures';
 
@@ -11,13 +13,15 @@ export class MainMenu extends Scene
 
     create ()
     {
-        const { width, height } = this.scale;
+        setupCamera(this);
+        const { width, height } = SCREEN;
         this.cameras.main.setBackgroundColor(PALETTE.darkness);
+        sound.startMusic();
 
         //  등불지기와 등불 빛
-        const glow = this.add.image(width / 2, 300, 'lanternGlow').setScale(2.4).setBlendMode(Phaser.BlendModes.ADD);
-        this.add.image(width / 2, 300, 'player').setScale(3);
-        this.tweens.add({ targets: glow, scale: 2.7, alpha: 0.75, duration: 1400, yoyo: true, repeat: -1, ease: 'Sine.easeInOut' });
+        const glow = this.add.image(width / 2, 300, 'lanternGlow').setScale(artScale(2.4)).setBlendMode(Phaser.BlendModes.ADD);
+        this.add.image(width / 2, 300, 'player').setScale(artScale(3));
+        this.tweens.add({ targets: glow, scale: artScale(2.7), alpha: 0.75, duration: 1400, yoyo: true, repeat: -1, ease: 'Sine.easeInOut' });
 
         this.add.text(width / 2, 130, '마지막 등불', {
             fontFamily: 'Arial Black', fontSize: 64, color: '#ffd27a',
@@ -33,7 +37,7 @@ export class MainMenu extends Scene
         }).setOrigin(0.5);
         this.tweens.add({ targets: start, alpha: 0.4, duration: 900, yoyo: true, repeat: -1 });
 
-        this.add.text(width / 2, height - 120, '이동: WASD / 방향키   공격은 자동', {
+        this.add.text(width / 2, height - 120, '이동: WASD / 방향키   공격은 자동   M: 소리 켜기/끄기', {
             fontFamily: 'Arial, sans-serif', fontSize: 18, color: '#8a82a8'
         }).setOrigin(0.5);
 

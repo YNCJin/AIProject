@@ -1,3 +1,4 @@
+import { setupCamera } from '../display';
 import { Scene } from 'phaser';
 import { createTextures } from '../art/Textures';
 
@@ -10,6 +11,7 @@ export class Preloader extends Scene
 
     init ()
     {
+        setupCamera(this);
         //  진행 막대 (외곽선 + 차오르는 금색 막대)
         this.add.rectangle(512, 384, 468, 32).setStrokeStyle(1, 0xffd27a);
         const bar = this.add.rectangle(512 - 230, 384, 4, 28, 0xffd27a);

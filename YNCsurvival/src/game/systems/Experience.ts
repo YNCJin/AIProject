@@ -1,3 +1,4 @@
+import { artScale } from '../display';
 import { DEPTH, XP, xpToNextLevel } from '../config';
 import { Player } from '../entities/Player';
 
@@ -37,7 +38,7 @@ export class Experience
         gem.setTexture(texture);    //  풀에서 재사용된 보석은 이전 텍스처가 남아 있을 수 있음
         gem.enableBody(true, x, y, true, true);
         gem.setData('value', value);
-        gem.setDepth(DEPTH.embers);
+        gem.setDepth(DEPTH.embers).setScale(artScale());
         return gem;
     }
 

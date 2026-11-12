@@ -7,8 +7,18 @@ const RECONNECT_DELAY_MS = 3000;
 export interface ChatMessage
 {
     type: 'chat';
-    platform: string;   //  'discord' | 'dummy' | 'manual' ...
+    platform: string;   //  'chzzk' | 'discord' | 'dummy' | 'manual'
     user: string;
+    text: string;
+    ts: number;
+}
+
+export interface DonationMessage
+{
+    type: 'donation';
+    platform: string;   //  'chzzk' | 'manual'
+    user: string;
+    amount: number;     //  원
     text: string;
     ts: number;
 }
@@ -16,6 +26,7 @@ export interface ChatMessage
 export interface ChatClientHandlers
 {
     onChat: (message: ChatMessage) => void;
+    onDonation?: (message: DonationMessage) => void;
     onStatus?: (connected: boolean) => void;
 }
 
@@ -51,6 +62,10 @@ export class ChatClient
             {
                 this.handlers.onChat(data);
             }
+            else if (isDonationMessage(data))
+            {
+                this.handlers.onDonation?.(data);
+            }
         };
 
         //  서버가 꺼져 있거나 끊기면 일정 시간 후 자동 재연결
@@ -77,4 +92,11 @@ function isChatMessage (data: unknown): data is ChatMessage
     const m = data as ChatMessage;
     return typeof m === 'object' && m !== null && m.type === 'chat'
         && typeof m.user === 'string' && typeof m.text === 'string';
+}
+
+function isDonationMessage (data: unknown): data is DonationMessage
+{
+    const m = data as DonationMessage;
+    return typeof m === 'object' && m !== null && m.type === 'donation'
+        && typeof m.user === 'string' && typeof m.amount === 'number';
 }

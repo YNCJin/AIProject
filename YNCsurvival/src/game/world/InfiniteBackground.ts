@@ -1,3 +1,4 @@
+import { artScale, SCREEN } from '../display';
 import { GROUND_TILE_SIZE, GROUND_VARIANTS } from '../art/Textures';
 import { DEPTH } from '../config';
 
@@ -15,13 +16,13 @@ export class InfiniteBackground
 
     constructor (scene: Phaser.Scene)
     {
-        const { width, height } = scene.scale;
+        const { width, height } = SCREEN;
         this.cols = Math.ceil(width / GROUND_TILE_SIZE) + 1;
         this.rows = Math.ceil(height / GROUND_TILE_SIZE) + 1;
 
         for (let i = 0; i < this.cols * this.rows; i++)
         {
-            this.tiles.push(scene.add.image(0, 0, 'ground0').setOrigin(0).setDepth(DEPTH.ground));
+            this.tiles.push(scene.add.image(0, 0, 'ground0').setOrigin(0).setDepth(DEPTH.ground).setScale(artScale()));
         }
     }
 

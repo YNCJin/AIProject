@@ -1,5 +1,6 @@
+import { artScale, SCREEN } from '../display';
 import { BEAST_EYE_OFFSET } from '../art/Textures';
-import { BEASTS, DEPTH, SPAWN } from '../config';
+import { BEASTS, beastHp, DEPTH, EARLY_GAME, SPAWN, spawnIntervalMs } from '../config';
 import { Player } from '../entities/Player';
 import { pointAroundPlayer } from '../utils/spawn';
 
@@ -39,14 +40,15 @@ export class EnemySpawner
             this.updateSpawn(delta, elapsedMs);
         }
 
-        const { width, height } = this.scene.scale;
+        const { width, height } = SCREEN;
         const recycleDist = Math.hypot(width, height) / 2 + SPAWN.recycleMargin;
         const recycleSq = recycleDist * recycleDist;
+        const speedMult = elapsedMs < EARLY_GAME.untilMs ? EARLY_GAME.beastSpeedMult : 1;
 
         for (const enemy of this.activeEnemies())
         {
             const kind = enemy.getData('kind') as BeastKind;
-            this.scene.physics.moveToObject(enemy, this.player, BEASTS[kind].speed);
+            this.scene.physics.moveToObject(enemy, this.player, BEASTS[kind].speed * speedMult);
             enemy.setFlipX(enemy.body!.velocity.x < 0);
 
             if (Phaser.Math.Distance.Squared(enemy.x, enemy.y, this.player.x, this.player.y) > recycleSq)
@@ -54,19 +56,22 @@ export class EnemySpawner
                 const p = pointAroundPlayer(this.scene, this.player);
                 enemy.body!.reset(p.x, p.y);
             }
+        }
+    }
 
-            const eye = enemy.getData('eye') as Image;
-            const offset = BEAST_EYE_OFFSET[kind];
-            eye.setPosition(enemy.x + (enemy.flipX ? -offset.x : offset.x), enemy.y + offset.y);
+    //  물리 이동이 반영된 뒤(POST_UPDATE)에 호출: 눈을 몸 위치에 맞춤 (앞에서 하면 한 프레임 늦어 떨림)
+    render ()
+    {
+        for (const enemy of this.activeEnemies())
+        {
+            const offset = BEAST_EYE_OFFSET[enemy.getData('kind') as BeastKind];
+            (enemy.getData('eye') as Image).setPosition(enemy.x + (enemy.flipX ? -offset.x : offset.x), enemy.y + offset.y);
         }
     }
 
     private updateSpawn (delta: number, elapsedMs: number)
     {
-        const interval = Math.max(
-            SPAWN.minIntervalMs,
-            SPAWN.startIntervalMs - (elapsedMs / 1000) * SPAWN.speedupPerSec
-        );
+        const interval = spawnIntervalMs(elapsedMs);
 
         this.spawnAccMs += delta;
         while (this.spawnAccMs >= interval)
@@ -95,15 +100,15 @@ export class EnemySpawner
         enemy.setTexture(kind);
         enemy.enableBody(true, x, y, true, true);
         enemy.body!.setSize(enemy.width * 0.8, enemy.height * 0.8);
-        enemy.setDepth(DEPTH.beast);
+        enemy.setDepth(DEPTH.beast).setScale(artScale());
         enemy.clearTint();
         enemy.setData('kind', kind);
-        enemy.setData('hp', BEASTS[kind].hp);
+        enemy.setData('hp', beastHp(kind, elapsedMs));
 
         let eye = enemy.getData('eye') as Image | undefined;
         if (!eye)
         {
-            eye = this.scene.add.image(x, y, 'beastEyes').setDepth(DEPTH.beastEyes);
+            eye = this.scene.add.image(x, y, 'beastEyes').setDepth(DEPTH.beastEyes).setScale(artScale());
             this.eyes.add(eye);
             enemy.setData('eye', eye);
         }

@@ -1,6 +1,10 @@
 //  「마지막 등불」 임시 그래픽 - 이미지 파일 없이 코드로 그린다
 //  색감: 화면 대부분은 짙은 남색·보라, 공격 이펙트는 따뜻한 주황·금색
 //  나중에 Preloader 의 preload() 에서 같은 키로 픽셀 아트 이미지를 로드하면 그대로 교체된다
+//  선명하게 보이도록 모든 그림은 ART_SCALE(2)배 크기로 그리고, 화면에는 artScale() 로 줄여서 표시한다
+//  (아래 좌표와 크기는 모두 화면에 보이는 크기 기준)
+
+import { ART_SCALE } from '../display';
 
 export const PALETTE = {
     night: 0x0b0d22,        //  바닥 기본색
@@ -67,8 +71,10 @@ function canvas (scene: Phaser.Scene, key: string, w: number, h: number, draw: (
     {
         return;     //  이미 이미지로 로드되어 있으면 그대로 사용
     }
-    const tex = scene.textures.createCanvas(key, w, h)!;
-    draw(tex.getContext());
+    const tex = scene.textures.createCanvas(key, w * ART_SCALE, h * ART_SCALE)!;
+    const ctx = tex.getContext();
+    ctx.scale(ART_SCALE, ART_SCALE);
+    draw(ctx);
     tex.refresh();
 }
 

@@ -1,3 +1,4 @@
+import { SCREEN } from '../display';
 import { formatTime } from '../utils/format';
 
 export interface HudState
@@ -29,13 +30,13 @@ export class Hud
     private killText: Phaser.GameObjects.Text;
     private buildText: Phaser.GameObjects.Text;
 
-    constructor (private scene: Phaser.Scene)
+    constructor (scene: Phaser.Scene)
     {
         const textStyle: Phaser.Types.GameObjects.Text.TextStyle = {
             fontFamily: 'Arial Black', fontSize: 24, color: '#ffffff',
             stroke: '#000000', strokeThickness: 5
         };
-        const { width } = scene.scale;
+        const { width } = SCREEN;
 
         //  setScrollFactor(0): 카메라가 움직여도 화면에 고정
         this.xpBar = scene.add.graphics().setScrollFactor(0).setDepth(100);
@@ -60,7 +61,7 @@ export class Hud
 
     update (state: HudState)
     {
-        const { width } = this.scene.scale;
+        const { width } = SCREEN;
 
         this.xpBar.clear();
         this.xpBar.fillStyle(0x000000, 0.6).fillRect(0, 0, width, XP_BAR_HEIGHT);

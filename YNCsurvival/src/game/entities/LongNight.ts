@@ -1,3 +1,4 @@
+import { ART_SCALE, artScale, GAME_WIDTH, viewRect } from '../display';
 import { DEPTH, FINAL, LIGHT, MOTH, PILGRIM } from '../config';
 import { Boss, BossContext } from './Boss';
 
@@ -32,8 +33,8 @@ export class LongNight extends Boss
     constructor (ctx: BossContext, now: number)
     {
         super(ctx, ctx.player.x, ctx.player.y - FINAL.skyOffsetY, 'eclipse', FINAL.hp);
-        this.setDepth(DEPTH.sky).setScale(FINAL.skyScale);
-        this.body!.setCircle(90, 30, 30);
+        this.setDepth(DEPTH.sky).setScale(artScale(FINAL.skyScale));
+        this.body!.setCircle(90 * ART_SCALE, 30 * ART_SCALE, 30 * ART_SCALE);
         (this.body as Phaser.Physics.Arcade.Body).moves = false;
 
         this.nextFanAt = now + 2500;
@@ -41,7 +42,7 @@ export class LongNight extends Boss
         this.nextMeteorAt = now + 8000;
         this.nextBossPatternAt = now + FINAL.bossPatternIntervalMs;
 
-        const { width } = ctx.scene.scale;
+        const width = GAME_WIDTH;
         this.screenBar = ctx.scene.add.graphics().setScrollFactor(0).setDepth(DEPTH.hud);
         this.nameText = ctx.scene.add.text(width / 2, 62, '', {
             fontFamily: 'Arial Black', fontSize: 18, color: '#ffe2a8', stroke: '#000000', strokeThickness: 4
@@ -75,6 +76,10 @@ export class LongNight extends Boss
             this.brighten();
         }
 
+    }
+
+    render ()
+    {
         this.drawScreenBar();
     }
 
@@ -131,7 +136,7 @@ export class LongNight extends Boss
         this.scene.tweens.killTweensOf(lighting);
         lighting.darkness = Phaser.Math.Linear(LIGHT.finalDarkness, 0.3, progress);
 
-        this.sunGlow?.setPosition(this.x, this.y).setScale(2 + progress * 4).setAlpha(0.4 + progress * 1.2);
+        this.sunGlow?.setPosition(this.x, this.y).setScale(artScale(2 + progress * 4)).setAlpha(0.4 + progress * 1.2);
         if (!this.tintFill)
         {
             this.restoreTint();     //  피격 번쩍임 중이 아닐 때만 색 갱신
@@ -284,7 +289,7 @@ export class LongNight extends Boss
 
     private randomEdgePoint ()
     {
-        const view = this.scene.cameras.main.worldView;
+        const view = viewRect(this.scene);
         const side = Phaser.Math.Between(0, 3);
         const t = Math.random();
         switch (side)
@@ -304,7 +309,7 @@ export class LongNight extends Boss
 
     private drawScreenBar ()
     {
-        const { width } = this.scene.scale;
+        const width = GAME_WIDTH;
         const x = (width - SCREEN_BAR_WIDTH) / 2;
         const y = 86;
         const color = this.phase === 3 ? 0xffc04d : 0x7e57c2;

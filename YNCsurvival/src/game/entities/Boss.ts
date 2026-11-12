@@ -1,3 +1,4 @@
+import { artScale } from '../display';
 import { DEPTH } from '../config';
 import { Hazards } from '../systems/Hazards';
 import { Lighting } from '../world/Lighting';
@@ -35,7 +36,7 @@ export abstract class Boss extends Phaser.Physics.Arcade.Sprite
 
         this.hp = hp;
         this.maxHp = hp;
-        this.setDepth(DEPTH.boss);
+        this.setDepth(DEPTH.boss).setScale(artScale());
         this.hpBar = ctx.scene.add.graphics().setDepth(DEPTH.boss);
     }
 
@@ -82,6 +83,12 @@ export abstract class Boss extends Phaser.Physics.Arcade.Sprite
     }
 
     abstract update (now: number): void;
+
+    //  물리 이동이 반영된 뒤(POST_UPDATE)에 호출: HP 바 / 이름표를 몸 위치에 맞춤
+    render ()
+    {
+        this.drawHpBar();
+    }
 
     destroy (fromScene?: boolean)
     {

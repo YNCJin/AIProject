@@ -1,3 +1,5 @@
+import { sound } from '../audio/Sound';
+import { artScale } from '../display';
 import { DEPTH } from '../config';
 import { EMBER_SHOT, EMBER_SHOT_LEVELS } from '../data/weapons';
 import { Weapon, WeaponContext } from './Weapon';
@@ -52,6 +54,7 @@ export class EmberShot extends Weapon
             const angle = Phaser.Math.Angle.Between(player.lanternX, player.lanternY, target.x, target.y) + offset;
             this.fire(angle, damage, time);
         }
+        sound.play('emberShot');
     }
 
     private fire (angle: number, damage: number, time: number)
@@ -64,7 +67,7 @@ export class EmberShot extends Weapon
         }
 
         bullet.enableBody(true, player.lanternX, player.lanternY, true, true);
-        bullet.setDepth(DEPTH.projectile).setBlendMode(Phaser.BlendModes.ADD).setScale(1.3);
+        bullet.setDepth(DEPTH.projectile).setBlendMode(Phaser.BlendModes.ADD).setScale(artScale(1.3));
         bullet.setData('expireAt', time + EMBER_SHOT.lifeMs);
         bullet.setData('damage', damage);
         this.ctx.scene.physics.velocityFromRotation(angle, EMBER_SHOT.speed, bullet.body!.velocity);

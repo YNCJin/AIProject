@@ -1,3 +1,4 @@
+import { SCREEN, setupCamera } from '../display';
 import { Scene } from 'phaser';
 import { PALETTE } from '../art/Textures';
 import { formatTime } from '../utils/format';
@@ -20,7 +21,8 @@ export class GameOver extends Scene
 
     create ()
     {
-        const { width } = this.scale;
+        setupCamera(this);
+        const { width } = SCREEN;
         const cleared = this.result.cleared;
 
         this.cameras.main.setBackgroundColor(cleared ? 0xfff4dc : PALETTE.darkness);

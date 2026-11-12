@@ -1,3 +1,4 @@
+import { sound } from '../audio/Sound';
 import { LANTERN_AURA, LANTERN_AURA_LEVELS } from '../data/weapons';
 import { Weapon, WeaponContext } from './Weapon';
 
@@ -43,6 +44,7 @@ export class LanternAura extends Weapon
         if (hit.length > 0)
         {
             lighting.pulse();
+            sound.play('aura');
         }
     }
 }

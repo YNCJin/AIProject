@@ -59,6 +59,15 @@ export class BossManager
         }
     }
 
+    //  물리 이동이 반영된 뒤(POST_UPDATE)에 호출: HP 바 등 보스에 붙은 표시를 위치에 맞춤
+    render ()
+    {
+        for (const boss of this.activeBosses())
+        {
+            boss.render();
+        }
+    }
+
     get finalBoss (): LongNight | undefined
     {
         return this.activeBosses().find((b) => b.kind === 'final') as LongNight | undefined;

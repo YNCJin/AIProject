@@ -1,3 +1,5 @@
+import { sound } from '../audio/Sound';
+import { followCamera, GAME_HEIGHT, GAME_WIDTH, SCREEN, setupCamera } from '../display';
 import { Scene } from 'phaser';
 import { PALETTE } from '../art/Textures';
 import { DEPTH, FALLBACK_HEAL, LIGHT, MOTH, SHOW_DEBUG_BUTTONS } from '../config';
@@ -20,6 +22,8 @@ import { LanternAura } from '../weapons/LanternAura';
 import { Weapon, WeaponContext } from '../weapons/Weapon';
 import { InfiniteBackground } from '../world/InfiniteBackground';
 import { Lighting } from '../world/Lighting';
+import { DonationMessage } from '../net/ChatClient';
+import { DONATION_EVENT } from './ChatOverlay';
 import { LevelUpData } from './LevelUp';
 
 export interface GameResult
@@ -64,10 +68,12 @@ export class Game extends Scene
 
     create ()
     {
+        setupCamera(this);
         this.kills = 0;
         this.elapsedMs = 0;
         this.pendingLevelUps = 0;
         this.isGameOver = false;
+        sound.startMusic();
 
         //  끝없이 이어지는 밤의 대지 (배경 이미지 몇 장을 재배치해서 재사용)
         this.cameras.main.setBackgroundColor(PALETTE.night);
@@ -76,12 +82,13 @@ export class Game extends Scene
         //  등불지기
         this.stats = new PlayerStats();
         this.player = new Player(this, 0, 0, this.stats);
-        this.cameras.main.startFollow(this.player, true);
+        followCamera(this, this.player);
         this.lighting = new Lighting(this);
 
         //  그을린 짐승 / 경험치 불씨
         this.enemies = new EnemySpawner(this, this.player, (x, y, xp) => {
             this.kills++;
+            sound.play('kill');
             this.experience.dropGem(x, y, xp);
         });
         this.experience = new Experience(this, this.player, () => this.onLevelUp());
@@ -126,6 +133,14 @@ export class Game extends Scene
             ]);
         }
 
+        //  방송 후원(치지직 등)이 들어오면 나방 여왕 소환
+        const onDonationEvent = (message: DonationMessage) => this.onDonation(message.amount, message.user);
+        this.game.events.on(DONATION_EVENT, onDonationEvent);
+        this.events.once(Phaser.Scenes.Events.SHUTDOWN, () => this.game.events.off(DONATION_EVENT, onDonationEvent));
+
+        this.events.on(Phaser.Scenes.Events.POST_UPDATE, this.lateUpdate, this);
+        this.events.once(Phaser.Scenes.Events.SHUTDOWN, () => this.events.off(Phaser.Scenes.Events.POST_UPDATE, this.lateUpdate, this));
+
         this.announce('마지막 등불이 꺼지기 전에', '#ffd27a');
     }
 
@@ -145,15 +160,23 @@ export class Game extends Scene
         this.hazards.update(now);
         this.weapons.forEach((weapon) => weapon.update(now, delta));
         this.experience.update();
+    }
+
+    //  물리 엔진이 이번 프레임의 이동을 오브젝트에 반영한 뒤(POST_UPDATE) 호출
+    //  플레이어를 따라다니는 표시(빛, 배경, HP 바, 짐승 눈, 보스 HP 바)를 여기서 그려야 한 프레임씩 어긋나며 떨리지 않는다
+    lateUpdate ()
+    {
         this.updateWorld();
+        this.enemies.render();
+        this.bosses.render();
         this.updateHud();
     }
 
     //  배경 재배치 + 어둠/등불 (카메라가 플레이어를 정중앙에 두므로 화면 왼쪽 위 = 플레이어 - 화면 절반)
     updateWorld ()
     {
-        const viewX = this.player.x - this.scale.width / 2;
-        const viewY = this.player.y - this.scale.height / 2;
+        const viewX = this.player.x - GAME_WIDTH / 2;
+        const viewY = this.player.y - GAME_HEIGHT / 2;
         this.background.update(viewX, viewY);
         this.lighting.update(this.elapsedMs, this.player.x, this.player.y, viewX, viewY);
     }
@@ -195,6 +218,7 @@ export class Game extends Scene
         this.isGameOver = true;
         this.physics.pause();
         this.player.setTint(0x555566);
+        sound.stopMusic(1.2);
         this.lighting.fadeDarkness(1, 900);
         this.updateHud();
 
@@ -208,9 +232,13 @@ export class Game extends Scene
 
     // ---------------------------------------------------------------- 보스 / 후원
 
-    //  후원이 들어왔을 때 (지금은 테스트 버튼, 나중에 미들웨어의 후원 이벤트와 연결)
+    //  후원이 들어왔을 때 (미들웨어의 후원 이벤트 / 테스트 버튼)
     onDonation (amount: number, donor?: string)
     {
+        if (this.isGameOver)
+        {
+            return;
+        }
         if (!this.bosses.spawnMothQueen(amount, donor))
         {
             this.announce('나방 여왕을 더 부를 수 없음', '#b0bec5');
@@ -264,8 +292,9 @@ export class Game extends Scene
         this.physics.pause();
         this.hazards.clear();
         this.lighting.fadeDarkness(0, DAWN_MS);
+        sound.stopMusic(DAWN_MS / 1000);
 
-        const { width, height } = this.scale;
+        const { width, height } = SCREEN;
         const dawn = this.add.rectangle(0, 0, width, height, 0xfff4dc)
             .setOrigin(0).setScrollFactor(0).setDepth(DEPTH.ending).setAlpha(0);
         const title = this.add.text(width / 2, height / 2 - 20, '새벽', {
@@ -283,7 +312,7 @@ export class Game extends Scene
     //  화면 가운데에 잠깐 떴다가 사라지는 알림 문구
     announce (message: string, color: string)
     {
-        const text = this.add.text(this.scale.width / 2, this.scale.height / 2 - 150, message, {
+        const text = this.add.text(GAME_WIDTH / 2, GAME_HEIGHT / 2 - 150, message, {
             fontFamily: 'Arial Black', fontSize: 34, color,
             stroke: '#000000', strokeThickness: 7
         }).setOrigin(0.5).setScrollFactor(0).setDepth(DEPTH.announce);

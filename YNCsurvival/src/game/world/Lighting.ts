@@ -1,7 +1,8 @@
+import { ART_SCALE, SCREEN } from '../display';
 import { PALETTE } from '../art/Textures';
 import { DEPTH, LIGHT } from '../config';
 
-const MASK_SIZE = 256;          //  lightMask 텍스처 크기
+const MASK_SIZE = 256 * ART_SCALE;     //  lightMask 텍스처 크기
 const RADIUS_LERP = 0.12;       //  빛 반경이 바뀔 때 부드럽게 따라가는 정도
 
 //  어둠과 등불 시야
@@ -25,7 +26,7 @@ export class Lighting
 
     constructor (private scene: Phaser.Scene)
     {
-        const { width, height } = scene.scale;
+        const { width, height } = SCREEN;
 
         this.overlay = scene.add.renderTexture(0, 0, width, height)
             .setOrigin(0).setScrollFactor(0).setDepth(DEPTH.darkness);
