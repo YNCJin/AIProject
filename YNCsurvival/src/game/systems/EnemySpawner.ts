@@ -8,6 +8,14 @@ type Sprite = Phaser.Physics.Arcade.Sprite;
 type Image = Phaser.GameObjects.Image;
 
 export type BeastKind = 'dog' | 'wolf';
+export interface BeastOptions
+{
+    kind?: BeastKind;
+    hpMult?: number;
+    speedMult?: number;
+    scale?: number;
+}
+
 export type EnemyKilledHandler = (x: number, y: number, xp: number) => void;
 
 //  일반 몬스터: 그을린 짐승 (들개 / 늑대) 생성 / 추적 / 피해 처리 (보스는 systems/BossManager.ts)
@@ -19,6 +27,7 @@ export class EnemySpawner
     private eyes: Phaser.GameObjects.Group;
     private spawnAccMs = 0;
     spawning = true;
+    speedMultiplier = 1;    //  시청자 이벤트(적 가속/감속)로 잠시 바뀜
 
     constructor (
         private scene: Phaser.Scene,
@@ -48,7 +57,9 @@ export class EnemySpawner
         for (const enemy of this.activeEnemies())
         {
             const kind = enemy.getData('kind') as BeastKind;
-            this.scene.physics.moveToObject(enemy, this.player, BEASTS[kind].speed * speedMult);
+            //  기본 속도 x 초반 완화 x 강화 짐승 배율 x 시청자 이벤트(가속/감속)
+            const speed = BEASTS[kind].speed * speedMult * ((enemy.getData('speedMult') as number) ?? 1) * this.speedMultiplier;
+            this.scene.physics.moveToObject(enemy, this.player, speed);
             enemy.setFlipX(enemy.body!.velocity.x < 0);
 
             if (Phaser.Math.Distance.Squared(enemy.x, enemy.y, this.player.x, this.player.y) > recycleSq)
@@ -65,7 +76,8 @@ export class EnemySpawner
         for (const enemy of this.activeEnemies())
         {
             const offset = BEAST_EYE_OFFSET[enemy.getData('kind') as BeastKind];
-            (enemy.getData('eye') as Image).setPosition(enemy.x + (enemy.flipX ? -offset.x : offset.x), enemy.y + offset.y);
+            const size = enemy.scaleX / artScale();     //  강화 짐승은 크기가 달라서 눈 위치도 비례
+            (enemy.getData('eye') as Image).setPosition(enemy.x + (enemy.flipX ? -offset.x : offset.x) * size, enemy.y + offset.y * size);
         }
     }
 
@@ -82,28 +94,30 @@ export class EnemySpawner
     }
 
     //  화면 바로 바깥의 원 위에서 랜덤 위치에 생성. 시간이 지날수록 늑대 비율이 늘어난다
-    spawnAroundPlayer (elapsedMs = 0)
+    //  options: 시청자 이벤트용 강화 짐승 (종류 고정, 체력 / 속도 / 크기 배율)
+    spawnAroundPlayer (elapsedMs = 0, options: BeastOptions = {}): Sprite | null
     {
         const wolfRatio = Math.min(
             BEASTS.wolfRatioMax,
             BEASTS.wolfRatioStart + (elapsedMs / 60_000) * BEASTS.wolfRatioPerMin
         );
-        const kind: BeastKind = Math.random() < wolfRatio ? 'wolf' : 'dog';
+        const kind: BeastKind = options.kind ?? (Math.random() < wolfRatio ? 'wolf' : 'dog');
         const { x, y } = pointAroundPlayer(this.scene, this.player);
 
         const enemy = this.group.get(x, y, kind) as Sprite | null;
         if (!enemy)
         {
-            return;     //  풀이 가득 참 (최대 마릿수 도달)
+            return null;    //  풀이 가득 참 (최대 마릿수 도달)
         }
 
         enemy.setTexture(kind);
+        enemy.setData('speedMult', options.speedMult ?? 1);
         enemy.enableBody(true, x, y, true, true);
         enemy.body!.setSize(enemy.width * 0.8, enemy.height * 0.8);
-        enemy.setDepth(DEPTH.beast).setScale(artScale());
+        enemy.setDepth(DEPTH.beast).setScale(artScale(options.scale ?? 1));
         enemy.clearTint();
         enemy.setData('kind', kind);
-        enemy.setData('hp', beastHp(kind, elapsedMs));
+        enemy.setData('hp', beastHp(kind, elapsedMs) * (options.hpMult ?? 1));
 
         let eye = enemy.getData('eye') as Image | undefined;
         if (!eye)
@@ -113,6 +127,12 @@ export class EnemySpawner
             enemy.setData('eye', eye);
         }
         eye.setVisible(true).setActive(true);
+        return enemy;
+    }
+
+    get aliveCount (): number
+    {
+        return this.group.countActive(true);
     }
 
     contactDamage (enemy: Sprite): number
