@@ -21,6 +21,25 @@ import { Weapon, WeaponContext } from '../weapons/Weapon';
 import { InfiniteBackground } from '../world/InfiniteBackground';
 import { Lighting } from '../world/Lighting';
 import { LevelUpData } from './LevelUp';
+import { AudienceEvent, getStreamDirector, StreamDirectorClient } from '../net/StreamDirectorClient';
+import { AudienceEvents } from '../systems/AudienceEvents';
+import type { ChatOverlay } from './ChatOverlay';
+
+const PLAYER_NICKNAME = '등불지기';
+const STATE_REPORT_MS = 2000;       //  AI 서버로 게임 상태를 보내는 주기 (LLM 상황 판단용)
+const PROGRESS_RECORD_MS = 60_000;  //  플레이 기록(DB) 중간 저장 주기
+const SAVE_SLOT = 0;
+
+//  서버 DB 에 저장되는 세이브: 기록 요약
+interface LanternSave
+{
+    plays: number;
+    clears: number;
+    bestSurvivedMs: number;
+    bestKills: number;
+    bestLevel: number;
+    lastPlayedAt: string;
+}
 
 export interface GameResult
 {
@@ -47,6 +66,10 @@ export class Game extends Scene
     experience: Experience;
     weapons: Weapon[];
     hud: Hud;
+    ai: StreamDirectorClient;
+    audience: AudienceEvents;
+    pendingAudience: AudienceEvent[];
+    save: { data: LanternSave; version: number } | null;
 
     cursors: Phaser.Types.Input.Keyboard.CursorKeys;
     wasd: Record<'up' | 'down' | 'left' | 'right', Phaser.Input.Keyboard.Key>;
@@ -122,11 +145,115 @@ export class Game extends Scene
                 { label: '나방 여왕 (후원 5천원)', onClick: () => this.onDonation(5_000, '테스트') },
                 { label: '나방 여왕 (후원 5만원)', onClick: () => this.onDonation(50_000, '테스트') },
                 { label: '긴 밤 소환', onClick: () => this.bosses.spawnFinal() ?? this.announce('긴 밤이 이미 와 있음', '#b0bec5') },
-                { label: '긴 밤 다음 페이즈', onClick: () => this.bosses.finalBoss?.skipPhase() }
+                { label: '긴 밤 다음 페이즈', onClick: () => this.bosses.finalBoss?.skipPhase() },
+                //  AI 서버 연동 테스트: 가짜 시청자 채팅을 서버로 보냄 (검열 -> AI -> 이벤트 경로를 그대로 거침)
+                { label: 'AI: 채팅 "몹 더 보내"', onClick: () => this.simulateChat(['몹 더 보내줘', '몬스터 많이 보내', '좀비 소환 ㄱㄱ', '시발 노잼']) },
+                { label: 'AI: 채팅 "아이템 줘"', onClick: () => this.simulateChat(['보급 상자 줘', '아이템 드랍 해줘', '선물 주자']) },
+                { label: 'AI: 후원 1만원 "보스"', onClick: () => this.simulateDonation(10_000, '보스 소환해줘') }
             ]);
         }
 
         this.announce('마지막 등불이 꺼지기 전에', '#ffd27a');
+        this.connectAudience();
+    }
+
+    // ---------------------------------------------------------------- 시청자 참여 (StreamDirector AI 서버, MCP)
+
+    connectAudience ()
+    {
+        this.audience = new AudienceEvents(this);
+        this.pendingAudience = [];
+        this.save = null;
+
+        this.ai = getStreamDirector((connected) => {
+            const overlay = this.scene.get('ChatOverlay') as ChatOverlay | null;
+            overlay?.addLine(connected ? '[시스템] AI 서버 연결됨' : '[시스템] AI 서버 연결 끊김 - 재연결 시도 중',
+                connected ? '#81c784' : '#e57373');
+        });
+        //  레벨업 화면 등으로 씬이 멈춰 있을 때 온 이벤트는 모아 뒀다가 다시 진행될 때 적용
+        this.ai.startEvents((event) => this.pendingAudience.push(event));
+        void this.ai.startSession(PLAYER_NICKNAME);
+        void this.ai.load<LanternSave>(SAVE_SLOT).then((save) => { this.save = save; });
+
+        this.time.addEvent({ delay: STATE_REPORT_MS, loop: true, callback: () => this.reportState() });
+        this.time.addEvent({
+            delay: PROGRESS_RECORD_MS, loop: true,
+            callback: () => void this.ai.recordProgress(this.wave, this.player.hp, this.experience.level,
+                this.kills, this.kills, this.audience.applied)
+        });
+        this.events.once(Phaser.Scenes.Events.SHUTDOWN, () => this.audience.destroy());
+    }
+
+    simulateChat (texts: string[])
+    {
+        const stamp = Date.now();
+        const messages = texts.map((text, i) => ({
+            user_id: `test-viewer-${stamp}-${i}`, nickname: `테스트시청자${i + 1}`, text, platform: 'test'
+        }));
+        void this.ai.call('ingest_chat', { session_id: this.ai.sessionId ?? 'active', messages }).then((r) => {
+            if (!r) this.announce('AI 서버에 연결되지 않음', '#e57373');
+        });
+    }
+
+    simulateDonation (amount: number, text: string)
+    {
+        void this.ai.call('ingest_donation', {
+            session_id: this.ai.sessionId ?? 'active',
+            donation: { user_id: `test-donor-${Date.now()}`, nickname: '테스트후원자', amount, text }
+        }).then((r) => {
+            if (!r) this.announce('AI 서버에 연결되지 않음', '#e57373');
+        });
+    }
+
+    //  게임에 웨이브 개념이 없어서 1분 = 1웨이브로 환산해 AI 에 전달
+    get wave (): number
+    {
+        return 1 + Math.floor(this.elapsedMs / 60_000);
+    }
+
+    reportState ()
+    {
+        if (this.isGameOver)
+        {
+            return;
+        }
+        const bosses = this.bosses.group.getChildren().filter((b) => b.active).map((b) => (b as Boss).kind);
+        void this.ai.reportState({
+            wave: this.wave,
+            player_hp: Math.max(0, this.player.hp),
+            player_max_hp: this.stats.maxHp,
+            player_level: this.experience.level,
+            enemies_alive: this.enemies.aliveCount,
+            score: this.kills,
+            elapsed_sec: this.elapsedMs / 1000,
+            extra: { bosses, final_boss: !!this.bosses.finalBoss, light_radius: Math.round(this.lighting.radius) }
+        }, PLAYER_NICKNAME);
+    }
+
+    //  판이 끝나면 플레이 기록 + 세이브(최고 기록) 저장
+    finishSession (cleared: boolean)
+    {
+        const result = this.result(cleared);
+        void this.ai.endSession({
+            status: cleared ? 'cleared' : 'dead',
+            final_wave: this.wave,
+            score: result.kills,
+            kills: result.kills,
+            level: result.level,
+            ai_events_applied: this.audience.applied,
+            extra: { survived_ms: Math.round(result.survivedMs) }
+        });
+
+        const prev = this.save?.data;
+        const data: LanternSave = {
+            plays: (prev?.plays ?? 0) + 1,
+            clears: (prev?.clears ?? 0) + (cleared ? 1 : 0),
+            bestSurvivedMs: Math.max(prev?.bestSurvivedMs ?? 0, Math.round(result.survivedMs)),
+            bestKills: Math.max(prev?.bestKills ?? 0, result.kills),
+            bestLevel: Math.max(prev?.bestLevel ?? 0, result.level),
+            lastPlayedAt: new Date().toISOString()
+        };
+        void this.ai.save(SAVE_SLOT, data as unknown as Record<string, unknown>, this.save?.version ?? 0, '기록');
     }
 
     update (_time: number, delta: number)
@@ -138,6 +265,11 @@ export class Game extends Scene
 
         this.elapsedMs += delta;
         const now = this.elapsedMs;     //  시간 기준은 게임 경과 시간 (레벨업 일시정지 중에는 멈춰 있음)
+
+        while (this.pendingAudience.length > 0)
+        {
+            this.audience.apply(this.pendingAudience.shift()!);
+        }
 
         this.updateMovement();
         this.enemies.update(delta, now);
@@ -197,6 +329,7 @@ export class Game extends Scene
         this.player.setTint(0x555566);
         this.lighting.fadeDarkness(1, 900);
         this.updateHud();
+        this.finishSession(false);
 
         this.time.delayedCall(1200, () => this.scene.start('GameOver', this.result(false)));
     }
@@ -261,6 +394,7 @@ export class Game extends Scene
     playDawnEnding ()
     {
         this.isGameOver = true;
+        this.finishSession(true);
         this.physics.pause();
         this.hazards.clear();
         this.lighting.fadeDarkness(0, DAWN_MS);

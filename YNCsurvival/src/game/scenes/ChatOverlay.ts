@@ -27,7 +27,10 @@ export class ChatOverlay extends Scene
         this.wasConnected = false;
 
         this.client = new ChatClient(MIDDLEWARE_WS_URL, {
-            onChat: (message) => this.addLine(`${message.user}: ${message.text}`, '#ffffff'),
+            onChat: (message) => this.addLine(`${message.user}: ${message.text}`, message.filtered ? '#9e9e9e' : '#ffffff'),
+            onDonation: (message) => this.addLine(
+                `💸 ${message.user} ${message.amount.toLocaleString()}원${message.text ? `: ${message.text}` : ''}`, '#ffd27a'),
+            onEvent: (message) => this.addLine(`[AI] ${message.overlay_text}`, '#e1bee7'),
             onStatus: (connected) => {
                 if (connected)
                 {

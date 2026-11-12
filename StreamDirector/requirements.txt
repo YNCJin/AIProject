@@ -1,0 +1,12 @@
+mcp[cli]>=2.3,<3
+google-genai>=2.29
+pydantic>=2.13
+python-dotenv>=1.0
+uvicorn>=0.54
+httpx>=0.28
+websockets>=16.0
+discord.py>=2.7
+pytest>=8
+pytest-asyncio>=1.0
+torch>=2.14
+transformers>=5.19

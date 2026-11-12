@@ -1,0 +1,66 @@
+{"text": "보스 소환해줘", "label": "COMMAND", "intent": "spawn_boss"}
+{"text": "보스 나와라!!", "label": "COMMAND", "intent": "spawn_boss"}
+{"text": "boss plz", "label": "COMMAND", "intent": "spawn_boss"}
+{"text": "네임드 등장 시켜줘", "label": "COMMAND", "intent": "spawn_boss"}
+{"text": "몹 더 보내줘", "label": "COMMAND", "intent": "spawn_enemies"}
+{"text": "좀비 소환 ㄱㄱ", "label": "COMMAND", "intent": "spawn_enemies"}
+{"text": "몬스터 많이 보내", "label": "COMMAND", "intent": "spawn_enemies"}
+{"text": "적 두배로", "label": "COMMAND", "intent": "spawn_enemies"}
+{"text": "슬라임 불러와", "label": "COMMAND", "intent": "spawn_enemies"}
+{"text": "힐 해줘", "label": "COMMAND", "intent": "heal_player"}
+{"text": "체력 회복 시켜줘", "label": "COMMAND", "intent": "heal_player"}
+{"text": "살려주세요", "label": "COMMAND", "intent": "heal_player"}
+{"text": "포션 줘라", "label": "COMMAND", "intent": "heal_player"}
+{"text": "버프 줘", "label": "COMMAND", "intent": "buff_player"}
+{"text": "공격력 강화 해줘", "label": "COMMAND", "intent": "buff_player"}
+{"text": "쉴드 줘요", "label": "COMMAND", "intent": "buff_player"}
+{"text": "무적 시켜줘", "label": "COMMAND", "intent": "buff_player"}
+{"text": "디버프 걸어줘", "label": "COMMAND", "intent": "debuff_player"}
+{"text": "저주 해라", "label": "COMMAND", "intent": "debuff_player"}
+{"text": "아이템 드랍 해줘", "label": "COMMAND", "intent": "drop_item"}
+{"text": "보급 상자 줘", "label": "COMMAND", "intent": "drop_item"}
+{"text": "무기 선물 줘", "label": "COMMAND", "intent": "drop_item"}
+{"text": "비 오게 해줘", "label": "COMMAND", "intent": "change_weather"}
+{"text": "폭풍 불러", "label": "COMMAND", "intent": "change_weather"}
+{"text": "안개 끼게 해줘", "label": "COMMAND", "intent": "change_weather"}
+{"text": "적 빠르게", "label": "COMMAND", "intent": "speed_up_enemies"}
+{"text": "몹 속도 업", "label": "COMMAND", "intent": "speed_up_enemies"}
+{"text": "몹 느리게 해줘", "label": "COMMAND", "intent": "slow_down_enemies"}
+{"text": "슬로우 모션 가자", "label": "COMMAND", "intent": "slow_down_enemies"}
+{"text": "와 컨트롤 미쳤다", "label": "REJECT"}
+{"text": "몇 웨이브임?", "label": "REJECT"}
+{"text": "오 잘한다", "label": "REJECT"}
+{"text": "밥 먹었어?", "label": "REJECT"}
+{"text": "오늘 날씨 좋다", "label": "REJECT"}
+{"text": "어제 축구 봤음?", "label": "REJECT"}
+{"text": "ㅋㅋㅋㅋㅋㅋ", "label": "REJECT"}
+{"text": "?????", "label": "REJECT"}
+{"text": "안녕하세요~", "label": "REJECT"}
+{"text": "기적!", "label": "REJECT"}
+{"text": "보스 소환하지마", "label": "REJECT"}
+{"text": "시발 노잼", "label": "ABUSE"}
+{"text": "ㅅㅂ 뭐하냐", "label": "ABUSE"}
+{"text": "ㅅ ㅂ", "label": "ABUSE"}
+{"text": "씨1발 꺼져", "label": "ABUSE"}
+{"text": "씨.발", "label": "ABUSE"}
+{"text": "병신같이 하네", "label": "ABUSE"}
+{"text": "ㅂㅅ아", "label": "ABUSE"}
+{"text": "개새끼야", "label": "ABUSE"}
+{"text": "개 새 끼", "label": "ABUSE"}
+{"text": "스트리머 존나 못하네", "label": "ABUSE"}
+{"text": "니애미", "label": "ABUSE"}
+{"text": "지랄하네", "label": "ABUSE"}
+{"text": "닥쳐", "label": "ABUSE"}
+{"text": "fuck this", "label": "ABUSE"}
+{"text": "ｓｈｉｔ", "label": "ABUSE"}
+{"text": "보스 소환해 시발", "label": "ABUSE"}
+{"text": "미친놈아 힐 줘", "label": "ABUSE"}
+{"text": "급식충들 꺼져", "label": "ABUSE"}
+{"text": "틀딱 방송", "label": "ABUSE"}
+{"text": "www.free-coin.com 무료 코인", "label": "SPAM"}
+{"text": "https://bit.ly/abc 들어와", "label": "SPAM"}
+{"text": "오픈카톡 들어오세요 부업 수익보장", "label": "SPAM"}
+{"text": "맞팔 구독 해주세요", "label": "SPAM"}
+{"text": "아아아아아아아아아아아아", "label": "SPAM"}
+{"text": "discord.gg/xyz 홍보", "label": "SPAM"}
+{"text": "010-1234-5678 연락주세요", "label": "SPAM"}
